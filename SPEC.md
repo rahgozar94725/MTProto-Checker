@@ -1,59 +1,65 @@
-# SPEC — MTProto Checker Windows Executable
+# SPEC — MTProto Checker
 
 ## §G — Goal
 
-Bundle Node.js MTProto Checker into single Windows .exe, zero runtime deps.
+Go-based MTProto proxy checker: single binary, 3 endpoints, DNS cache, TCP pre-filter, SSE streaming.
 
 ## §C — Constraints
 
 | C | Detail |
 |---|--------|
-| C1 | Output OS: Windows only (x64) |
-| C2 | User must NOT need Node.js / npm pre-installed |
-| C3 | Express static server on localhost:3000, auto-open browser |
-| C4 | Native deps (bufferutil, utf-8-validate, websocket) must compile |  <!-- ? --> |
-| C5 | ESM project (`"type": "module"`) — bundler must support |
-| C6 | Single-file .exe preferred over folder |
-| C7 | Must preserve all functionality: proxy check via GramJS |
-| C8 | Build from Windows host only (native deps need Windows) |
+| C1 | Go backend: `net/http`, `gotd/td`, 3 endpoints |
+| C2 | Port 3000, auto-open browser |
+| C3 | UI: bilingual (fa/en), dark mode, SSE streaming |
+| C4 | Timeout: 3-30s default 5s, hard limit +10s |
+| C5 | Concurrency: 10-50 default 50 |
+| C6 | No JS linting/formatting/CI/CD |
 
 ## §I — Interfaces
 
 | I | Surface | Detail |
 |---|---------|--------|
-| I1 | `app.js` | Express entrypoint, ES module |
+| I1 | `main.go` | Go backend entrypoint, `net/http`, `gotd/td` |
 | I2 | `public/` | Static assets (index.html, css/, js/) |
-| I3 | `package.json` | Deps: express, telegram, open; type: module |
-| I4 | `images/` | Readme assets (not needed at runtime) |
-| I5 | output `.exe` | Single Windows portable binary |
+| I3 | `images/` | Readme assets (not needed at runtime) |
+| I4 | `main_test.go` | Go unit + integration tests |
+| I5 | `proxytest_test.go` | Go Telegram proxy integration tests |
 
 ## §V — Invariants
 
 | V | Rule |
 |---|------|
-| V1 | .exe opens browser to localhost:3000 on first run |
-| V2 | .exe serves public/ assets correctly |
-| V3 | POST /check returns `{ok:bool, ping?:number}` same as node app.js |
-| V4 | .exe exits cleanly on Ctrl+C (no orphan node process) |
-| V5 | GramJS native deps (websocket, bufferutil) work inside bundle |
-| V6 | Build reproducibility: same commit → same .exe hash |
-| V7 | ∀ proxy input → deduplicate by `server:port:secret` before dispatch to /check |
-| V8 | ∀ check completion → play notification sound if user opted in (checkbox in UI, persisted in localStorage) |
+| V1 | Server auto-opens browser to localhost:3000 |
+| V2 | Server serves `public/` assets correctly (file server on `/`) |
+| V3 | `POST /check` returns `{ok:bool, ping?:number}` |
+| V4 | Server exits cleanly on SIGINT/SIGTERM (`Shutdown` with 5s ctx) |
+| V5 | `checkProxy` uses `dcs.MTProxy` resolver (no WebSocket native deps) |
+| V6 | `POST /check-stream` SSE — each result as `event: progress` + `event: done` at end |
+| V7 | `POST /check-batch` returns JSON array `[{ok:bool, ping?:number}, ...]` |
+| V8 | TCP pre-filter phase before full MTProto handshake (1.5s dial timeout) |
+| V9 | DNS cache with 5-min TTL for proxy server lookups |
+| V10 | Panic recovery on all HTTP handlers (returns 500 JSON) |
+| V11 | Concurrency from UI (`X-Concurrency` header) capped at 50 |
+| V12 | ∀ proxy input → deduplicate by `server:port:secret` before dispatch (UI-side Set) |
+| V13 | ∀ check completion → play notification sound if user opted in (checkbox in UI, persisted in localStorage) |
 
 ## §T — Tasks
 
 | T | Status | Description | Cites |
 |---|--------|-------------|-------|
-| T1 | x | research bundler for ESM + native deps | C5, C4 |
-| T2 | x | spike: bundle with Node SEA | T1 |
-| T3 | x | embed public/ assets in binary | I2 |
-| T4 | x | build .exe on Windows | C8 |
-| T5 | x | test standalone in isolated dir (no node_modules) | C2, V1-V4 |
-| T6 | x | add npm scripts for build | |
-| T7 | x | update README | |
+| T1 | x | implement Go backend with 3 endpoints | C1, I1 |
+| T2 | x | Go DNS cache + TCP pre-filter | V8, V9 |
+| T3 | x | Go panic recovery + clean shutdown | V10, V4 |
+| T4 | x | UI: SSE streaming via EventSource | V6 |
+| T5 | x | UI: configurable timeout + concurrency | C4, C5 |
+| T6 | x | UI: dedup + notification sound | V12, V13 |
+| T7 | x | Go integration tests (main_test, proxytest_test) | I4, I5 |
+| T8 | x | clean up Node.js backend files | |
+| T9 | x | update README + AGENTS.md + SPEC.md | |
 
 ## §B — Bugs
 
 | id | date | cause | fix |
 |----|------|-------|-----|
-| B1 | 2026-06-12 | duplicate proxy entries not eliminated before dispatch | V7 |
+| B1 | 2026-06-12 | duplicate proxy entries not eliminated before dispatch | V12 |
+| B2 | 2026-06-19 | Node.js `app.js` + `sea-entry.mjs` deleted; Go-only now | T8 |

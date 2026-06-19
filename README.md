@@ -7,7 +7,7 @@ A powerful tool to verify **Telegram MTProto Proxies** by performing real protoc
 ## 🌟 Features
 
 * **Deep Inspection:** Uses `help.getNearestDC` / `help.GetConfig` requests to verify if the proxy can actually transfer Telegram data.
-* **Dual Backend:** Choose between Node.js (GramJS) or Go (gotd/td) backend.
+* **Go Backend:** Powered by `gotd/td` — fast, stable, single binary.
 * **Smart Filtering:** Automatically detects and removes invalid secrets, spam links, and bad ports.
 * **Modern UI:** Beautiful Dark Mode interface with real-time logs and progress bars.
 * **File Upload:** Import proxy lists from .txt, .csv, or .list files.
@@ -38,30 +38,6 @@ go build -o mtproto-checker.exe .
 
 > Binary: ~21MB, no Node.js required.
 
-### Option 3 — Run from source with Node.js
-
-#### Prerequisites
-You need **Node.js** installed. [Download it here](https://nodejs.org/).
-
-#### Steps
-```bash
-git clone https://github.com/rahgozar94725/MTProto-Checker.git
-cd MTProto-Checker
-npm install
-node app.js
-```
-
-### Build .exe yourself
-
-Requires Node.js 20+ on Windows.
-
-```bash
-npm install
-npm run build
-```
-
-Output: `dist/MTProto-Checker.exe` (~97 MB, standalone).
-
 ## 📖 How to Use
 
 1.  **Get Proxies:** Copy your list of mixed/dirty MTProto proxies.
@@ -87,10 +63,7 @@ This tool does the following:
 * [gotd/td](https://github.com/gotd/td) - MTProto API client with native MTProxy support
 * No external dependencies needed — single binary
 
-### Node.js Backend
-* [express](https://www.npmjs.com/package/express) - Web server
-* [telegram](https://www.npmjs.com/package/telegram) (GramJS) - MTProto implementation
-* [open](https://www.npmjs.com/package/open) - Opens browser automatically
+
 
 ## ☕ Support
 

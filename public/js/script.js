@@ -113,11 +113,11 @@ let isPaused = false;
 let pauseResolve = null;
 
 function getConcurrency() {
-    return parseInt(document.getElementById('concurrencySelect').value) || 10;
+    return parseInt(document.getElementById('concurrencySelect').value) || 50;
 }
 
 function getTimeout() {
-    return parseInt(document.getElementById('timeoutSelect').value) || 8;
+    return parseInt(document.getElementById('timeoutSelect').value) || 5;
 }
 
 function saveSettings() {
@@ -126,6 +126,12 @@ function saveSettings() {
 }
 
 function loadSettings() {
+    // Migrate to v3 defaults: timeout=5, concurrency=50
+    if (!localStorage.getItem('settings_v') || localStorage.getItem('settings_v') < '3') {
+        localStorage.removeItem('timeout');
+        localStorage.removeItem('concurrency');
+        localStorage.setItem('settings_v', '3');
+    }
     const c = localStorage.getItem('concurrency');
     const t = localStorage.getItem('timeout');
     if (c) document.getElementById('concurrencySelect').value = c;
@@ -205,71 +211,110 @@ async function startCheck() {
 
         workingProxies = [];
         document.getElementById('outputProxies').value = '';
-        
-        const startBtn = document.getElementById('startBtn');
-        const pauseBtn = document.getElementById('pauseBtn');
-        startBtn.disabled = true;
-        startBtn.innerText = t.processing;
-        updatePauseBtn();
-        pauseBtn.style.display = '';
 
         let completed = 0;
         const total = validLinks.length;
 
         const batchSize = getConcurrency();
         const timeoutSec = getTimeout();
-        const clientTimeout = (timeoutSec + 2) * 1000;
 
         log(`Settings: concurrency=${batchSize}, timeout=${timeoutSec}s`);
 
-        const checkOne = async (proxyData) => {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), clientTimeout);
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        startBtn.disabled = true;
+        startBtn.innerText = t.processing;
+        updatePauseBtn();
+        pauseBtn.style.display = '';
+        updateUI(0, total);
 
-                const body = { ...proxyData, timeout: timeoutSec };
-                const response = await fetch('/check', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body),
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
+        // Build lookup: "server:port:secret" → original link
+        const linkMap = new Map();
+        for (const p of validLinks) {
+            linkMap.set(`${p.server}:${p.port}:${p.secret}`, p.original);
+        }
 
-                if (!response.ok) throw new Error('Server error');
-                const result = await response.json();
+        // Send ALL proxies in one SSE streaming request
+        const body = validLinks.map(p => ({
+            server: p.server, port: p.port, secret: p.secret, timeout: timeoutSec
+        }));
 
-                if (result.ok) {
-                    const existing = workingProxies.find(p => p.link === proxyData.original);
-                    if (existing) {
-                        existing.ping = result.ping;
-                    } else {
-                        workingProxies.push({ link: proxyData.original, ping: result.ping });
+        const controller = new AbortController();
+        const scanTimeout = (timeoutSec + 30) * 1000 + 120000;
+        const timeoutId = setTimeout(() => controller.abort(), scanTimeout);
+
+        let scanDone = false;
+        try {
+            const response = await fetch('/check-stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Concurrency': String(batchSize)
+                },
+                body: JSON.stringify(body),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error('Server error');
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            while (!scanDone) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                // Parse SSE frames
+                const frames = buffer.split('\n\n');
+                buffer = frames.pop(); // keep incomplete frame
+
+                for (const frame of frames) {
+                    if (!frame.trim()) continue;
+
+                    let eventType = '';
+                    let dataStr = '';
+                    for (const line of frame.split('\n')) {
+                        if (line.startsWith('event: ')) eventType = line.slice(7);
+                        else if (line.startsWith('data: ')) dataStr = line.slice(6);
                     }
-                    updateOutput();
-                    log(`SUCCESS: ${proxyData.server} (${result.ping}ms)`);
-                }
-            } catch (err) {
-                if (err.name !== 'AbortError') {
-                    log(`FAIL: ${proxyData.server} - ${err.message}`, true);
-                }
-            } finally {
-                completed++;
-                updateUI(completed, total);
-            }
-        };
-        let i = 0;
-        while (i < validLinks.length) {
-            const end = Math.min(i + batchSize, validLinks.length);
-            const batch = validLinks.slice(i, end);
-            await Promise.all(batch.map(p => checkOne(p)));
+                    if (!dataStr) continue;
 
-            if (isPaused) {
-                await new Promise(resolve => { pauseResolve = resolve; });
-                continue;
-            }
+                    const data = JSON.parse(dataStr);
 
-            i = end;
+                    if (eventType === 'done') {
+                        scanDone = true;
+                        break;
+                    }
+
+                    if (eventType === 'progress') {
+                        completed = data.completed;
+                        updateUI(completed, total);
+
+                        if (data.ok) {
+                            const key = `${data.server}:${data.port}:${data.secret}`;
+                            const orig = linkMap.get(key) || `tg://proxy?server=${data.server}&port=${data.port}&secret=${data.secret}`;
+                            workingProxies.push({ link: orig, ping: data.ping });
+                            log(`SUCCESS: ${data.server} (${data.ping}ms)`);
+                            updateOutput();
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            clearTimeout(timeoutId);
+            if (err.name !== 'AbortError') {
+                throw err;
+            }
+        }
+
+        if (!scanDone) {
+            // timed out or aborted — count remaining as failed
+            completed = total;
+            updateUI(completed, total);
         }
         finish();
     } catch (e) {
