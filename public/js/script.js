@@ -8,6 +8,7 @@ const translations = {
         startBtn: "شروع بررسی",
         pauseBtn: "⏸ توقف موقت",
         resumeBtn: "▶ ادامه",
+        stopBtn: "⛔ توقف کامل",
         outputLabel: "🚀 لیست ۱۰۰٪ سالم",
         outputPlaceholder: "نتایج سالم اینجا نمایش داده میشوند...",
         copyBtn: "کپی کردن لیست سالم",
@@ -35,6 +36,7 @@ const translations = {
         startBtn: "Start Check",
         pauseBtn: "⏸ Pause",
         resumeBtn: "▶ Resume",
+        stopBtn: "⛔ Stop",
         outputLabel: "🚀 Working Proxies (100%)",
         outputPlaceholder: "Working proxies will appear here...",
         copyBtn: "Copy Working List",
@@ -70,6 +72,7 @@ function toggleTheme() {
 }
 
 let currentLang = localStorage.getItem('lang') || 'fa';
+let scanState = 'idle'; // 'idle' | 'scanning'
 
 function setLanguage(lang) {
     currentLang = lang;
@@ -81,7 +84,10 @@ function setLanguage(lang) {
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (translations[lang][key]) el.innerText = translations[lang][key];
+        if (translations[lang][key]) {
+            if (el.id === 'startBtn') return;
+            el.innerText = translations[lang][key];
+        }
     });
 
     document.getElementById('inputProxies').placeholder = translations[lang].inputPlaceholder;
@@ -96,13 +102,29 @@ function updatePauseBtn() {
     btn.className = 'btn-pause' + (isPaused ? ' resume' : '');
 }
 
+function updateStartBtn() {
+    const btn = document.getElementById('startBtn');
+    const t = translations[currentLang];
+    if (scanState === 'idle') {
+        btn.innerText = t.startBtn;
+        btn.className = 'btn-start';
+        btn.disabled = false;
+    } else {
+        btn.innerText = t.stopBtn;
+        btn.className = 'btn-stop';
+        btn.disabled = false;
+    }
+}
+
 function changeLanguage(lang) {
     setLanguage(lang);
     updatePauseBtn();
+    updateStartBtn();
 }
 
 setLanguage(currentLang);
 setTheme(currentTheme);
+updateStartBtn();
 
 const MAX_LOG_LINES = 200;
 
@@ -125,7 +147,10 @@ window.onerror = function(message) {
 let workingProxies = [];
 let skippedCount = 0;
 let isPaused = false;
-let pauseResolve = null;
+let currentController = null;
+let checkedKeys = new Set();
+let allProxies = [];
+let globalLinkMap = new Map();
 
 function getConcurrency() {
     return parseInt(document.getElementById('concurrencySelect').value) || 50;
@@ -178,17 +203,139 @@ function parseLink(link) {
         }
 
         return { server, port, secret, original: cleanLink };
-    } catch (e) { return null; }
+    } catch (e) { return null;     }
+}
+
+function handleStartStop() {
+    if (scanState === 'idle') startCheck();
+    else stopScan();
+}
+
+function stopScan() {
+    if (currentController) {
+        currentController.abort();
+        currentController = null;
+    }
+    scanState = 'idle';
+    updateStartBtn();
+    document.getElementById('pauseBtn').style.display = 'none';
+    isPaused = false;
+    log('STOPPED');
 }
 
 function togglePause() {
     isPaused = !isPaused;
-    if (!isPaused && pauseResolve) {
-        pauseResolve();
-        pauseResolve = null;
+    if (isPaused) {
+        if (currentController) {
+            currentController.abort();
+            currentController = null;
+        }
+        updatePauseBtn();
+        log('PAUSED');
+    } else {
+        updatePauseBtn();
+        log('RESUMED');
+        const remaining = allProxies.filter(p => !checkedKeys.has(`${p.server}:${p.port}:${p.secret}`));
+        if (remaining.length === 0) {
+            finish();
+            return;
+        }
+        log(`Resuming with ${remaining.length} unchecked...`);
+        runCheckStream(remaining, globalLinkMap).then(r => {
+            if (r === 'done' || r === 'timeout') finish();
+        });
     }
-    updatePauseBtn();
-    log(isPaused ? 'PAUSED' : 'RESUMED');
+}
+
+async function runCheckStream(proxies, linkMap) {
+    if (proxies.length === 0) return 'done';
+
+    const controller = new AbortController();
+    currentController = controller;
+    const baseline = checkedKeys.size;
+    const totalOrig = allProxies.length;
+    const batchSize = getConcurrency();
+    const timeoutSec = getTimeout();
+    let scanDone = false;
+
+    const body = proxies.map(p => ({
+        server: p.server, port: p.port, secret: p.secret, timeout: timeoutSec
+    }));
+
+    const scanTimeout = (timeoutSec + 30) * 1000 + 120000;
+    const timeoutId = setTimeout(() => controller.abort(), scanTimeout);
+
+    try {
+        const response = await fetch('/check-stream', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Concurrency': String(batchSize)
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error('Server error');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (!scanDone) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            const frames = buffer.split('\n\n');
+            buffer = frames.pop();
+
+            for (const frame of frames) {
+                if (!frame.trim()) continue;
+
+                let eventType = '';
+                let dataStr = '';
+                for (const line of frame.split('\n')) {
+                    if (line.startsWith('event: ')) eventType = line.slice(7);
+                    else if (line.startsWith('data: ')) dataStr = line.slice(6);
+                }
+                if (!dataStr) continue;
+
+                const data = JSON.parse(dataStr);
+
+                if (eventType === 'done') {
+                    scanDone = true;
+                    break;
+                }
+
+                if (eventType === 'progress') {
+                    const currentTotal = baseline + data.completed;
+                    updateUI(currentTotal, totalOrig);
+
+                    const key = `${data.server}:${data.port}:${data.secret}`;
+                    checkedKeys.add(key);
+
+                    if (data.ok) {
+                        const orig = linkMap.get(key) || `tg://proxy?server=${data.server}&port=${data.port}&secret=${data.secret}`;
+                        workingProxies.push({ link: orig, ping: data.ping });
+                        log(`SUCCESS: ${data.server} (${data.ping}ms)`);
+                        updateOutput();
+                    }
+                }
+            }
+        }
+
+        return 'done';
+    } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+            return isPaused ? 'paused' : 'timeout';
+        }
+        throw err;
+    }
 }
 
 async function startCheck() {
@@ -199,7 +346,9 @@ async function startCheck() {
         if (!input) return showToast(t.toastEmpty, true);
 
         isPaused = false;
-        pauseResolve = null;
+        currentController = null;
+        checkedKeys = new Set();
+        allProxies = [];
 
         const lines = input.split('\n');
         skippedCount = 0;
@@ -227,115 +376,38 @@ async function startCheck() {
         workingProxies = [];
         document.getElementById('outputProxies').value = '';
 
-        let completed = 0;
         const total = validLinks.length;
 
-        const batchSize = getConcurrency();
-        const timeoutSec = getTimeout();
+        log(`Settings: concurrency=${getConcurrency()}, timeout=${getTimeout()}s`);
 
-        log(`Settings: concurrency=${batchSize}, timeout=${timeoutSec}s`);
-
-        const startBtn = document.getElementById('startBtn');
+        scanState = 'scanning';
+        updateStartBtn();
         const pauseBtn = document.getElementById('pauseBtn');
-        startBtn.disabled = true;
-        startBtn.innerText = t.processing;
         updatePauseBtn();
         pauseBtn.style.display = '';
         updateUI(0, total);
 
         // Build lookup: "server:port:secret" → original link
-        const linkMap = new Map();
+        globalLinkMap = new Map();
         for (const p of validLinks) {
-            linkMap.set(`${p.server}:${p.port}:${p.secret}`, p.original);
+            globalLinkMap.set(`${p.server}:${p.port}:${p.secret}`, p.original);
         }
 
-        // Send ALL proxies in one SSE streaming request
-        const body = validLinks.map(p => ({
-            server: p.server, port: p.port, secret: p.secret, timeout: timeoutSec
-        }));
+        allProxies = validLinks;
 
-        const controller = new AbortController();
-        const scanTimeout = (timeoutSec + 30) * 1000 + 120000;
-        const timeoutId = setTimeout(() => controller.abort(), scanTimeout);
-
-        let scanDone = false;
-        try {
-            const response = await fetch('/check-stream', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Concurrency': String(batchSize)
-                },
-                body: JSON.stringify(body),
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) throw new Error('Server error');
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            while (!scanDone) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-
-                // Parse SSE frames
-                const frames = buffer.split('\n\n');
-                buffer = frames.pop(); // keep incomplete frame
-
-                for (const frame of frames) {
-                    if (!frame.trim()) continue;
-
-                    let eventType = '';
-                    let dataStr = '';
-                    for (const line of frame.split('\n')) {
-                        if (line.startsWith('event: ')) eventType = line.slice(7);
-                        else if (line.startsWith('data: ')) dataStr = line.slice(6);
-                    }
-                    if (!dataStr) continue;
-
-                    const data = JSON.parse(dataStr);
-
-                    if (eventType === 'done') {
-                        scanDone = true;
-                        break;
-                    }
-
-                    if (eventType === 'progress') {
-                        completed = data.completed;
-                        updateUI(completed, total);
-
-                        if (data.ok) {
-                            const key = `${data.server}:${data.port}:${data.secret}`;
-                            const orig = linkMap.get(key) || `tg://proxy?server=${data.server}&port=${data.port}&secret=${data.secret}`;
-                            workingProxies.push({ link: orig, ping: data.ping });
-                            log(`SUCCESS: ${data.server} (${data.ping}ms)`);
-                            updateOutput();
-                        }
-                    }
-                }
+        const result = await runCheckStream(allProxies, globalLinkMap);
+        if (result === 'done' || result === 'timeout') {
+            if (result === 'timeout') {
+                updateUI(allProxies.length, allProxies.length);
             }
-        } catch (err) {
-            clearTimeout(timeoutId);
-            if (err.name !== 'AbortError') {
-                throw err;
-            }
+            finish();
         }
-
-        if (!scanDone) {
-            // timed out or aborted — count remaining as failed
-            completed = total;
-            updateUI(completed, total);
-        }
-        finish();
+        // result === 'paused' → togglePause handles resume
     } catch (e) {
         log(`MAIN ERROR: ${e.message}`, true);
         alert(translations[currentLang].errorGeneric);
-        document.getElementById('startBtn').disabled = false;
+        scanState = 'idle';
+        updateStartBtn();
         document.getElementById('pauseBtn').style.display = 'none';
     }
 }
@@ -360,10 +432,9 @@ function updateOutput() {
 
 function finish() {
     const t = translations[currentLang];
-    const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
-    startBtn.disabled = false;
-    startBtn.innerText = t.startBtn;
+    scanState = 'idle';
+    updateStartBtn();
     pauseBtn.style.display = 'none';
     isPaused = false;
     log('Process finished.');

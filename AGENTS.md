@@ -26,6 +26,8 @@ go run main.go   # localhost:3000, opens browser automatically
 | Endpoints | `POST /check` (single), `/check-batch` (batch JSON), `/check-stream` (SSE streaming) |
 | Test files | `main_test.go`, `proxytest_test.go` |
 | Build | `go build -o mtproto-checker.exe .` |
+| Start btn | Idle → blue `btn-start`. Scanning → red `btn-stop` (`scanState` global `'idle'`/`'scanning'`, `handleStartStop()` routes to `startCheck`/`stopScan`) |
+| Pause/Resume | Aborts SSE controller, reconnects with unchecked proxies only (`checkedKeys` Set) |
 
 ## Gotchas
 - No TypeScript, no linting, no formatting config

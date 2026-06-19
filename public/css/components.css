@@ -308,6 +308,19 @@ button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
     border-color: rgba(0,0,0,0.06);
 }
 
+.btn-stop {
+    background: linear-gradient(135deg, rgba(239,68,68,0.9), rgba(220,38,38,0.9));
+    box-shadow: 0 4px 16px rgba(239,68,68,0.3), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.btn-stop:hover {
+    background: linear-gradient(135deg, rgba(220,38,38,0.95), rgba(185,28,28,0.95));
+    box-shadow: 0 6px 20px rgba(239,68,68,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+[data-theme="light"] .btn-stop {
+    background: linear-gradient(135deg, rgba(220,38,38,0.92), rgba(185,28,28,0.92));
+    box-shadow: 0 4px 12px rgba(220,38,38,0.2), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
 /* ===== Debug Console ===== */
 .debug-console {
     background: var(--console-bg);

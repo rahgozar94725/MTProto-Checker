@@ -59,7 +59,7 @@
             <label data-i18n="inputLabel">📥 لیست ورودی</label>
             <textarea id="inputProxies" placeholder="..."></textarea>
             <div class="btn-row">
-                <button class="btn-start" id="startBtn" onclick="startCheck()" data-i18n="startBtn">شروع بررسی</button>
+                <button class="btn-start" id="startBtn" onclick="handleStartStop()">شروع بررسی</button>
                 <button class="btn-pause" id="pauseBtn" onclick="togglePause()" style="display:none">⏸ توقف موقت</button>
                 <label class="btn-file"><span data-i18n="fileBtn">📎 فایل</span>
                     <input type="file" id="fileInput" accept=".txt,.csv,.list" onchange="handleFileUpload(event)" style="display:none">

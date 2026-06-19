@@ -49,6 +49,8 @@ Go-based MTProto proxy checker: single binary, 3 endpoints, DNS cache, TCP pre-f
 | V15 | Self-hosted fonts: Vazirmatn (Persian) + Inter (English) served as woff2 from `public/fonts/`, no CDN |
 | V16 | All buttons use `backdrop-filter: blur(8px)` + glassmorphism borders/inset-shadows; uniform `height: 48px` |
 | V17 | Button colors: primary=gradient blue→indigo, copy/export=gradient emerald, pause=gradient amber |
+| V18 | ∀ pause → `controller.abort()` stops current SSE stream; ∀ resume → only unchecked proxies (by `server:port:secret` key in `checkedKeys` Set) are sent in new stream |
+| V19 | ∀ start scan → `scanState='scanning'`; start button becomes red Stop (`btn-stop`, `t.stopBtn`); ∀ stop → `controller.abort()`, state resets to `'idle'` |
 
 ## §T — Tasks
 
@@ -70,3 +72,4 @@ Go-based MTProto proxy checker: single binary, 3 endpoints, DNS cache, TCP pre-f
 |----|------|-------|-----|
 | B1 | 2026-06-12 | duplicate proxy entries not eliminated before dispatch | V12 |
 | B2 | 2026-06-19 | Node.js `app.js` + `sea-entry.mjs` deleted; Go-only now | T8 |
+| B3 | 2026-06-19 | pause/resume broken: `pauseResolve` never assigned, SSE loop never checks `isPaused` | V18 |
