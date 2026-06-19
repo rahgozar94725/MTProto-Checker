@@ -1,4 +1,4 @@
-:root {
+:root, [data-theme="dark"] {
     --bg: #0f172a;
     --card: #1e293b;
     --input: #334155;
@@ -13,6 +13,32 @@
     --warning: #f59e0b;
     --warning-hover: #d97706;
     --border: #475569;
+    --console-bg: #000;
+    --console-text: #00ff00;
+    --console-border: #333;
+}
+
+[data-theme="light"] {
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --input: #f1f5f9;
+    --text: #0f172a;
+    --text-secondary: #334155;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --success: #059669;
+    --success-hover: #047857;
+    --error: #dc2626;
+    --warning: #d97706;
+    --warning-hover: #b45309;
+    --border: #cbd5e1;
+    --console-bg: #f8fafc;
+    --console-text: #0f172a;
+    --console-border: #cbd5e1;
+}
+
+:root {
     --font-fa: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
     --font-en: 'Inter', system-ui, -apple-system, sans-serif;
     --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
@@ -21,6 +47,11 @@
     --radius-lg: 10px;
     --radius-xl: 16px;
     --shadow-card: 0 20px 50px rgba(0,0,0,0.5);
+    --shadow-card-light: 0 4px 24px rgba(0,0,0,0.08);
     --shadow-toast: 0 5px 15px rgba(0,0,0,0.3);
     --transition: 0.2s ease;
+}
+
+[data-theme="light"] {
+    --shadow-card: var(--shadow-card-light);
 }

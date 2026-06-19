@@ -55,6 +55,20 @@ const translations = {
     }
 };
 
+let currentTheme = localStorage.getItem('theme') || 'dark';
+
+function setTheme(theme) {
+    currentTheme = theme;
+    localStorage.setItem('theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    const btn = document.getElementById('themeToggle');
+    if (btn) btn.textContent = theme === 'dark' ? '🌙' : '☀️';
+}
+
+function toggleTheme() {
+    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+}
+
 let currentLang = localStorage.getItem('lang') || 'fa';
 
 function setLanguage(lang) {
@@ -88,6 +102,7 @@ function changeLanguage(lang) {
 }
 
 setLanguage(currentLang);
+setTheme(currentTheme);
 
 const MAX_LOG_LINES = 200;
 

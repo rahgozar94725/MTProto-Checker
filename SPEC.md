@@ -14,6 +14,9 @@ Go-based MTProto proxy checker: single binary, 3 endpoints, DNS cache, TCP pre-f
 | C4 | Timeout: 3-30s default 5s, hard limit +10s |
 | C5 | Concurrency: 10-50 default 50 |
 | C6 | No JS linting/formatting/CI/CD |
+| C7 | Zero external CDN at runtime — fonts/CSS/JS all served by Go `http.FileServer` |
+| C8 | Vanilla JS only — no frameworks |
+| C9 | CSS split by concern: `tokens.css` (vars), `base.css` (reset/typography), `components.css` (all components) |
 
 ## §I — Interfaces
 
@@ -42,6 +45,10 @@ Go-based MTProto proxy checker: single binary, 3 endpoints, DNS cache, TCP pre-f
 | V11 | Concurrency from UI (`X-Concurrency` header) capped at 50 |
 | V12 | ∀ proxy input → deduplicate by `server:port:secret` before dispatch (UI-side Set) |
 | V13 | ∀ check completion → play notification sound if user opted in (checkbox in UI, persisted in localStorage) |
+| V14 | Theme toggles dark/light, stored in localStorage `theme` key (default `'dark'`), sets `[data-theme]` on `<html>` |
+| V15 | Self-hosted fonts: Vazirmatn (Persian) + Inter (English) served as woff2 from `public/fonts/`, no CDN |
+| V16 | All buttons use `backdrop-filter: blur(8px)` + glassmorphism borders/inset-shadows; uniform `height: 48px` |
+| V17 | Button colors: primary=gradient blue→indigo, copy/export=gradient emerald, pause=gradient amber |
 
 ## §T — Tasks
 

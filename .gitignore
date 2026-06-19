@@ -1,5 +1,5 @@
 graphify-out/
+*~
 
 # Go
 mtproto-checker.exe
-*.exe
