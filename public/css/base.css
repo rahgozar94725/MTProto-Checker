@@ -1,0 +1,71 @@
+@font-face {
+    font-family: 'Vazirmatn';
+    font-style: normal;
+    font-weight: 400 700;
+    src: url('/fonts/vazirmatn/vazirmatn-arabic.woff2') format('woff2');
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 700;
+    src: url('/fonts/inter/inter-latin.woff2') format('woff2');
+    font-display: swap;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-fa);
+    background-color: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s;
+}
+
+html[dir="ltr"] body {
+    font-family: var(--font-en);
+}
+
+.container {
+    width: 100%;
+    max-width: 1100px;
+    background-color: var(--card);
+    padding: 30px;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    position: relative;
+}
+
+h1 {
+    text-align: center;
+    color: var(--accent);
+    margin: 0;
+    margin-top: 5px;
+}
+
+p.sub {
+    text-align: center;
+    color: var(--muted);
+    margin: 5px 0 12px 0;
+    font-size: 14px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    font-size: 14px;
+}
