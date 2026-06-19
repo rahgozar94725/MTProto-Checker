@@ -25,7 +25,7 @@ go run main.go   # localhost:3000, opens browser automatically
 | Concurrency | Configurable 10-50 from UI, default 50 |
 | Endpoints | `POST /check` (single), `/check-batch` (batch JSON), `/check-stream` (SSE streaming) |
 | Test files | `main_test.go`, `proxytest_test.go` |
-| Build | `go build -o mtproto-checker.exe .` |
+| Build | `go build -o mtproto-checker.exe .` — `public/` embedded via `embed.FS`, binary is self-contained |
 | Start btn | Idle → blue `btn-start`. Scanning → red `btn-stop` (`scanState` global `'idle'`/`'scanning'`, `handleStartStop()` routes to `startCheck`/`stopScan`) |
 | Pause/Resume | Aborts SSE controller, reconnects with unchecked proxies only (`checkedKeys` Set) |
 | Title link | `<h1>` wraps `<a href="https://github.com/rahgozar94725/MTProto-Checker" target="_blank">`, styled without underline |
@@ -36,3 +36,4 @@ go run main.go   # localhost:3000, opens browser automatically
 - No TypeScript, no linting, no formatting config
 - No `.env` — secrets are public test keys hardcoded in source
 - Node.js backend (`app.js`, `sea-entry.mjs`, SEA build) — DELETED, Go-only now
+- `public/` is embedded via `//go:embed` at compile time — no external dependency at runtime

@@ -2,16 +2,17 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -23,6 +24,9 @@ import (
 	"github.com/gotd/td/telegram/dcs"
 	"github.com/gotd/td/session"
 )
+
+//go:embed public
+var publicFS embed.FS
 
 var version = "dev"
 
@@ -471,9 +475,11 @@ func main() {
 		sendEvent("done", map[string]int{"working": working, "total": total})
 	}))
 
-	publicDir := filepath.Join(".", "public")
-	fs := http.FileServer(http.Dir(publicDir))
-	mux.Handle("/", fs)
+	embeddedFS, err := fs.Sub(publicFS, "public")
+	if err != nil {
+		log.Fatalf("Failed to embed public directory: %v", err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(embeddedFS)))
 
 	addr := fmt.Sprintf(":%d", port)
 	log.Printf("Server running at http://localhost:%d", port)
