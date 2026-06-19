@@ -24,6 +24,8 @@ import (
 	"github.com/gotd/td/session"
 )
 
+var version = "dev"
+
 const (
 	defaultPort     = 3000
 	testAppID       = 6
