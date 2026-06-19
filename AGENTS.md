@@ -9,7 +9,7 @@ go run main.go   # localhost:3000, opens browser automatically
 - **Go backend** (`main.go`) — 3 endpoints: `POST /check`, `/check-batch`, `/check-stream` (SSE)
 - **Uses** `github.com/gotd/td` (MTProto lib), DNS cache, TCP pre-check, panic recovery
 - **No linting, no formatting config, no CI/CD**
-- **Bilingual** — Persian (fa, default, RTL) + English (en, LTR), stored in `localStorage`
+- **Bilingual** — Persian (fa, default, RTL) + English (en, LTR) + Russian (ru, LTR) + Chinese (zh, LTR), stored in `localStorage`
 - **Frontend** — Vanilla JS, split CSS (`tokens.css`+`base.css`+`components.css`), `helpers.js` DOM utilities
 - **Fonts** — Self-hosted Vazirmatn (Persian, 46KB) + Inter (English, 48KB) as woff2, zero CDN
 - **Theme** — Dark/light toggle, persisted in localStorage, glassmorphism buttons with `backdrop-filter`

@@ -12,7 +12,7 @@ A powerful tool to verify **Telegram MTProto Proxies** by performing real protoc
 * **Modern UI:** Beautiful Dark Mode interface with real-time logs and progress bars.
 * **File Upload:** Import proxy lists from .txt, .csv, or .list files.
 * **Export Results:** Download working proxies as TXT or JSON files.
-* **Bilingual:** Supports both English and Persian (Farsi) interfaces.
+* **Bilingual:** Supports English, Persian (Farsi), Russian, and Chinese interfaces.
 * **No Auth Needed:** Uses public test keys, so you don't need to log in with your phone number.
 
 ## 🚀 Installation
@@ -78,4 +78,4 @@ If you found this tool useful, you can support the development:
 This project is open-source and available under the [MIT License](LICENSE).
 
 ---
-[Read in Persian (فارسی)](README_FA.md)
+[Read in English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)
