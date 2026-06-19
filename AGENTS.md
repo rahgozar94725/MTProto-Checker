@@ -28,6 +28,9 @@ go run main.go   # localhost:3000, opens browser automatically
 | Build | `go build -o mtproto-checker.exe .` |
 | Start btn | Idle → blue `btn-start`. Scanning → red `btn-stop` (`scanState` global `'idle'`/`'scanning'`, `handleStartStop()` routes to `startCheck`/`stopScan`) |
 | Pause/Resume | Aborts SSE controller, reconnects with unchecked proxies only (`checkedKeys` Set) |
+| Title link | `<h1>` wraps `<a href="https://github.com/rahgozar94725/MTProto-Checker" target="_blank">`, styled without underline |
+| Help btn | `#helpBtn` text from i18n (`helpBtn` key), opens per-language README on GitHub via `openHelp()` using `window.open` |
+| Release | GitHub Actions on `push tags: 'v*'` → matrix build for 5 platforms, auto-upload to Releases |
 
 ## Gotchas
 - No TypeScript, no linting, no formatting config

@@ -1,8 +1,10 @@
 # 🛡️ MTProto Deep Checker
 
+[Read in English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)
+
 一个强大的 **Telegram MTProto 代理** 验证工具，通过执行真实协议握手来检测代理。与简单的 TCP 检查器不同，此工具尝试通过代理获取实际的服务器配置，确保 100% 的连接性。
 
-![界面截图](images/screenshot.png)
+![界面截图](images/screenshot_zh.png)
 
 ## 🌟 功能特点
 
@@ -18,26 +20,32 @@
 
 ## 🚀 安装
 
-### 方式 1 — 下载 .exe (Windows)
+### 方式 1 — 从 Releases 下载
 
-从 [Releases](../../releases) 下载 `MTProto-Checker.exe`。双击运行。
+从 [Releases](../../releases) 下载适用于您平台的预编译二进制文件。
 
-> 浏览器将自动打开 `http://localhost:3000`。
+| 平台 | 文件 |
+|------|------|
+| Windows (amd64) | `mtproto-checker-windows-amd64.exe` |
+| Linux (amd64) | `mtproto-checker-linux-amd64` |
+| Linux (arm64) | `mtproto-checker-linux-arm64` |
+| macOS (Intel) | `mtproto-checker-darwin-amd64` |
+| macOS (Apple Silicon) | `mtproto-checker-darwin-arm64` |
 
-### 方式 2 — 从源码运行（推荐）
+运行后，浏览器将自动打开 `http://localhost:3000`。
 
-#### 前置要求
-需要安装 **Go 1.18+**。[在此下载](https://go.dev/dl/)。
+### 方式 2 — 从源码构建
 
-#### 步骤
+需要 **Go 1.18+**。[下载 Go](https://go.dev/dl/)。
+
 ```bash
 git clone https://github.com/rahgozar94725/MTProto-Checker.git
 cd MTProto-Checker
-go build -o mtproto-checker.exe .
-.\mtproto-checker.exe
+go build -o mtproto-checker .
+./mtproto-checker
 ```
 
-> 二进制文件：~21MB，无需 Node.js。
+> 二进制文件：~21MB，无其他依赖。
 
 ## 📖 使用方法
 
@@ -75,6 +83,3 @@ go build -o mtproto-checker.exe .
 ## 📝 许可证
 
 本项目为开源项目，基于 [MIT 许可证](LICENSE)。
-
----
-[Read in English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)

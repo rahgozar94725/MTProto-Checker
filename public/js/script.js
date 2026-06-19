@@ -20,6 +20,7 @@ const translations = {
         toastNoWorking: "😔 هیچ پروکسی سالمی پیدا نشد.",
         toastFound: "🎉 {n} پروکسی سالم پیدا شد!",
         errorGeneric: "خطایی رخ داد. کنسول را چک کنید.",
+        helpBtn: "📖 راهنما",
         fileBtn: "📎 فایل",
         exportTxtBtn: "💾 TXT",
         exportJsonBtn: "💾 JSON",
@@ -48,6 +49,7 @@ const translations = {
         toastNoWorking: "😔 No working proxies found.",
         toastFound: "🎉 Found {n} working proxies!",
         errorGeneric: "An error occurred. Check console.",
+        helpBtn: "📖 Help",
         fileBtn: "📎 File",
         exportTxtBtn: "💾 TXT",
         exportJsonBtn: "💾 JSON",
@@ -76,6 +78,7 @@ const translations = {
         toastNoWorking: "😔 Рабочих прокси не найдено.",
         toastFound: "🎉 Найдено {n} рабочих прокси!",
         errorGeneric: "Произошла ошибка. Проверьте консоль.",
+        helpBtn: "📖 Помощь",
         fileBtn: "📎 Файл",
         exportTxtBtn: "💾 TXT",
         exportJsonBtn: "💾 JSON",
@@ -104,6 +107,7 @@ const translations = {
         toastNoWorking: "😔 未找到可用代理.",
         toastFound: "🎉 找到 {n} 个可用代理!",
         errorGeneric: "发生错误。请检查控制台。",
+        helpBtn: "📖 帮助",
         fileBtn: "📎 文件",
         exportTxtBtn: "💾 TXT",
         exportJsonBtn: "💾 JSON",
@@ -260,6 +264,16 @@ function parseLink(link) {
 
         return { server, port, secret, original: cleanLink };
     } catch (e) { return null;     }
+}
+
+function openHelp() {
+    const urls = {
+        fa: 'https://github.com/rahgozar94725/MTProto-Checker/blob/main/README_FA.md',
+        en: 'https://github.com/rahgozar94725/MTProto-Checker/blob/main/README.md',
+        ru: 'https://github.com/rahgozar94725/MTProto-Checker/blob/main/README_RU.md',
+        zh: 'https://github.com/rahgozar94725/MTProto-Checker/blob/main/README_ZH.md'
+    };
+    window.open(urls[currentLang] || urls.en, '_blank', 'noopener');
 }
 
 function handleStartStop() {

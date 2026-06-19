@@ -16,7 +16,8 @@ html[dir="ltr"] .header-controls {
 
 .header-controls .theme-toggle,
 .header-controls .sound-toggle,
-.header-controls .lang-select {
+.header-controls .lang-select,
+.header-controls .help-btn {
     display: flex;
     align-items: center;
     box-sizing: border-box;
@@ -38,7 +39,8 @@ html[dir="ltr"] .header-controls {
 
 .header-controls .theme-toggle:hover,
 .header-controls .sound-toggle:hover,
-.header-controls .lang-select:hover {
+.header-controls .lang-select:hover,
+.header-controls .help-btn:hover {
     border-color: var(--accent);
     background-color: #3f4a5e;
 }
@@ -112,6 +114,23 @@ html[dir="rtl"] .lang-select {
     min-width: 36px;
     font-size: 15px;
     padding: 4px 8px;
+}
+
+.help-btn {
+    justify-content: center;
+    font-size: 13px;
+    padding: 4px 10px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--text);
+    font-family: inherit;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+[data-theme="light"] .header-controls .help-btn:hover {
+    background-color: #e2e8f0;
 }
 
 /* ===== Settings Bar ===== */

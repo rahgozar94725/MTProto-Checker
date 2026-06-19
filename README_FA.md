@@ -1,5 +1,7 @@
 # 🛡️ تست دقیق پروکسی MTProto
 
+[English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)
+
 یک ابزار قدرتمند و سبک برای تست واقعی پروکسی‌های تلگرام. برخلاف اکثر چکرها که فقط «پینگ» می‌گیرند، این ابزار واقعاً تلاش می‌کند اطلاعات را از سرور تلگرام دانلود کند. اگر پروکسی در این برنامه «سالم» نشان داده شود، یعنی **۱۰۰٪ در تلگرام وصل می‌شود** و روی حالت `Connecting` گیر نمی‌کند.
 
 ![اسکرین شات](images/screenshot_fa.png)
@@ -15,11 +17,32 @@
 
 ## 📦 نصب و راه‌اندازی
 
-### گزینه ۱ — دانلود فایل .exe (ویندوز، بدون نیاز به Node.js)
+### گزینه ۱ — دانلود از ریلیز
 
-فایل `MTProto-Checker.exe` را از [بخش Release](../../releases) دانلود کنید. دوبار کلیک کنید تا اجرا شود.
+فایل باینری آماده برای سیستم‌عامل خود را از [بخش Release](../../releases) دانلود کنید.
 
-> مرورگر به صورت خودکار در آدرس `http://localhost:3000` باز می‌شود.
+| سیستم‌عامل | فایل |
+|------------|------|
+| ویندوز (amd64) | `mtproto-checker-windows-amd64.exe` |
+| لینوکس (amd64) | `mtproto-checker-linux-amd64` |
+| لینوکس (arm64) | `mtproto-checker-linux-arm64` |
+| مک (Intel) | `mtproto-checker-darwin-amd64` |
+| مک (Apple Silicon) | `mtproto-checker-darwin-arm64` |
+
+فایل را اجرا کنید. مرورگر به صورت خودکار در آدرس `http://localhost:3000` باز می‌شود.
+
+### گزینه ۲ — بیلد از سورس
+
+نیازمند **Go 1.18+**. [دانلود Go](https://go.dev/dl/).
+
+```bash
+git clone https://github.com/rahgozar94725/MTProto-Checker.git
+cd MTProto-Checker
+go build -o mtproto-checker .
+./mtproto-checker
+```
+
+> باینری: ~21MB، بدون وابستگی دیگر.
 
 
 
@@ -53,6 +76,3 @@
 ## 📄 لایسنس
 
 این پروژه متن‌باز (Open Source) است و تحت لایسنس MIT منتشر شده است.
-
----
-[English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)

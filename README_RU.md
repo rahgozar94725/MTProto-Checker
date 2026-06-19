@@ -1,8 +1,10 @@
 # 🛡️ MTProto Deep Checker
 
+[Read in English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)
+
 Инструмент для проверки **Telegram MTProto прокси** с выполнением реального рукопожатия протокола. В отличие от простых TCP-чекеров, этот инструмент пытается получить конфигурацию сервера через прокси, гарантируя 100% работоспособность.
 
-![Скриншот](images/screenshot.png)
+![Скриншот](images/screenshot_ru.png)
 
 ## 🌟 Возможности
 
@@ -18,26 +20,32 @@
 
 ## 🚀 Установка
 
-### Вариант 1 — Скачать .exe (Windows)
+### Вариант 1 — Скачать из Releases
 
-Скачайте `MTProto-Checker.exe` из [Releases](../../releases). Запустите двойным щелчком.
+Скачайте готовый бинарник для вашей платформы из [Releases](../../releases).
 
-> Браузер откроется автоматически по адресу `http://localhost:3000`.
+| Платформа | Файл |
+|-----------|------|
+| Windows (amd64) | `mtproto-checker-windows-amd64.exe` |
+| Linux (amd64) | `mtproto-checker-linux-amd64` |
+| Linux (arm64) | `mtproto-checker-linux-arm64` |
+| macOS (Intel) | `mtproto-checker-darwin-amd64` |
+| macOS (Apple Silicon) | `mtproto-checker-darwin-arm64` |
 
-### Вариант 2 — Запуск из исходников с Go (рекомендуется)
+Запустите бинарник. Браузер откроется автоматически по адресу `http://localhost:3000`.
 
-#### Требования
-Установите **Go 1.18+**. [Скачать здесь](https://go.dev/dl/).
+### Вариант 2 — Сборка из исходников
 
-#### Шаги
+Требуется **Go 1.18+**. [Скачать Go](https://go.dev/dl/).
+
 ```bash
 git clone https://github.com/rahgozar94725/MTProto-Checker.git
 cd MTProto-Checker
-go build -o mtproto-checker.exe .
-.\mtproto-checker.exe
+go build -o mtproto-checker .
+./mtproto-checker
 ```
 
-> Бинарник: ~21MB, Node.js не требуется.
+> Бинарник: ~21MB, других зависимостей нет.
 
 ## 📖 Как использовать
 
@@ -75,6 +83,3 @@ go build -o mtproto-checker.exe .
 ## 📝 Лицензия
 
 Проект с открытым исходным кодом под лицензией [MIT](LICENSE).
-
----
-[Read in English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)

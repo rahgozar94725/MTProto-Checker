@@ -1,5 +1,7 @@
 # 🛡️ MTProto Deep Checker
 
+[Read in English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)
+
 A powerful tool to verify **Telegram MTProto Proxies** by performing real protocol handshakes. Unlike simple TCP checkers, this tool attempts to fetch the actual server configuration from Telegram via the proxy, ensuring 100% connectivity and eliminating the "Connecting..." issue.
 
 ![UI Screenshot](images/screenshot.png)
@@ -17,26 +19,32 @@ A powerful tool to verify **Telegram MTProto Proxies** by performing real protoc
 
 ## 🚀 Installation
 
-### Option 1 — Download .exe (Windows, no Node.js needed)
+### Option 1 — Download from Releases
 
-Grab `MTProto-Checker.exe` from [Releases](../../releases). Double-click to run.
+Download the pre-built binary for your platform from [Releases](../../releases).
 
-> Browser opens automatically at `http://localhost:3000`.
+| Platform | File |
+|----------|------|
+| Windows (amd64) | `mtproto-checker-windows-amd64.exe` |
+| Linux (amd64) | `mtproto-checker-linux-amd64` |
+| Linux (arm64) | `mtproto-checker-linux-arm64` |
+| macOS (Intel) | `mtproto-checker-darwin-amd64` |
+| macOS (Apple Silicon) | `mtproto-checker-darwin-arm64` |
 
-### Option 2 — Run from source with Go (recommended)
+Run the binary. Browser opens automatically at `http://localhost:3000`.
 
-#### Prerequisites
-You need **Go 1.18+** installed. [Download it here](https://go.dev/dl/).
+### Option 2 — Build from Source
 
-#### Steps
+Requires **Go 1.18+**. [Download Go](https://go.dev/dl/).
+
 ```bash
 git clone https://github.com/rahgozar94725/MTProto-Checker.git
 cd MTProto-Checker
-go build -o mtproto-checker.exe .
-.\mtproto-checker.exe
+go build -o mtproto-checker .
+./mtproto-checker
 ```
 
-> Binary: ~21MB, no Node.js required.
+> Binary: ~21MB, no other dependencies.
 
 ## 📖 How to Use
 
@@ -76,6 +84,3 @@ If you found this tool useful, you can support the development:
 ## 📝 License
 
 This project is open-source and available under the [MIT License](LICENSE).
-
----
-[Read in English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)

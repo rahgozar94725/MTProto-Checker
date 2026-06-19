@@ -10,7 +10,7 @@ Go-based MTProto proxy checker: single binary, 3 endpoints, DNS cache, TCP pre-f
 |---|--------|
 | C1 | Go backend: `net/http`, `gotd/td`, 3 endpoints |
 | C2 | Port 3000, auto-open browser |
-| C3 | UI: bilingual (fa/en), dark mode, SSE streaming |
+| C3 | UI: 4 languages (fa/en/ru/zh), dark/light theme, SSE streaming |
 | C4 | Timeout: 3-30s default 5s, hard limit +10s |
 | C5 | Concurrency: 10-50 default 50 |
 | C6 | No JS linting/formatting/CI/CD |
@@ -51,6 +51,7 @@ Go-based MTProto proxy checker: single binary, 3 endpoints, DNS cache, TCP pre-f
 | V17 | Button colors: primary=gradient blue→indigo, copy/export=gradient emerald, pause=gradient amber |
 | V18 | ∀ pause → `controller.abort()` stops current SSE stream; ∀ resume → only unchecked proxies (by `server:port:secret` key in `checkedKeys` Set) are sent in new stream |
 | V19 | ∀ start scan → `scanState='scanning'`; start button becomes red Stop (`btn-stop`, `t.stopBtn`); ∀ stop → `controller.abort()`, state resets to `'idle'` |
+| V20 | Title `<h1>` wraps `<a>` pointing to repo; help button `#helpBtn` opens per-language README on GitHub in new tab via `openHelp()` |
 
 ## §T — Tasks
 
