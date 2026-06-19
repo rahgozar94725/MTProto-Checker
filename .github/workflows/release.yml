@@ -4,6 +4,9 @@ on:
   push:
     tags: [ 'v*' ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -38,12 +41,54 @@ jobs:
         run: |
           go build -ldflags="-X main.version=${{ github.ref_name }}" \
             -o mtproto-checker-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} .
-
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
 
-      - uses: softprops/action-gh-release@v2
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: mtproto-checker-*
+          name: binary-${{ matrix.os }}-${{ matrix.arch }}
+          path: mtproto-checker-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            echo "notes=Initial release" >> $GITHUB_OUTPUT
+            echo "prev=" >> $GITHUB_OUTPUT
+          else
+            LOG=$(git log $PREV_TAG..${{ github.ref_name }} --oneline --no-decorate)
+            echo "prev=$PREV_TAG" >> $GITHUB_OUTPUT
+            echo "notes<<EOF" >> $GITHUB_OUTPUT
+            echo "$LOG" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: List files
+        run: find . -name 'mtproto-checker-*' -type f
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: binary-*/*
+          body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.notes }}
+
+            **Full changelog:** https://github.com/${{ github.repository }}/compare/${{ steps.changelog.outputs.prev }}...${{ github.ref_name }}
