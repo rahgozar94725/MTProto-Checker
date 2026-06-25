@@ -44,8 +44,6 @@ const (
 	shutdownTimeout = 5 * time.Second
 )
 
-var sharedSession = &session.StorageMemory{}
-
 type dnsCacheEntry struct {
 	ips  []net.IP
 	next time.Time
@@ -142,9 +140,16 @@ func checkProxy(ctx context.Context, server string, port int, secret string, tim
 		return 0, errors.Wrap(err, "create MTProxy resolver")
 	}
 
+	// Each proxy must get its own fresh session storage. The auth key and target
+	// DC that gotd caches here are negotiated with one specific proxy/server — a
+	// shared storage would make every subsequent proxy reuse a key that is invalid
+	// for it (decryption / AUTH_KEY errors), and concurrent checks would corrupt it.
+	// A per-call store forces a clean handshake from scratch, which is the point.
+	localSession := &session.StorageMemory{}
+
 	client := telegram.NewClient(testAppID, testAppHash, telegram.Options{
 		Resolver:        resolver,
-		SessionStorage:  sharedSession,
+		SessionStorage:  localSession,
 		DialTimeout:     minTimeoutDuration,
 		ExchangeTimeout: 2 * time.Second,
 		NoUpdates:       true,
