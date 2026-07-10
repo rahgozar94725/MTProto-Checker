@@ -259,7 +259,7 @@ function getConcurrency() {
 }
 
 function getTimeout() {
-    return parseInt(document.getElementById('timeoutSelect').value) || 5;
+    return parseInt(document.getElementById('timeoutSelect').value) || 10;
 }
 
 function saveSettings() {
@@ -268,11 +268,12 @@ function saveSettings() {
 }
 
 function loadSettings() {
-    // Migrate to v3 defaults: timeout=5, concurrency=50
-    if (!localStorage.getItem('settings_v') || localStorage.getItem('settings_v') < '3') {
+    // Migrate to v4 defaults: timeout=10 (5s was too short and wrongly failed
+    // slow-but-healthy proxies), concurrency=50
+    if (!localStorage.getItem('settings_v') || localStorage.getItem('settings_v') < '4') {
         localStorage.removeItem('timeout');
         localStorage.removeItem('concurrency');
-        localStorage.setItem('settings_v', '3');
+        localStorage.setItem('settings_v', '4');
     }
     const c = localStorage.getItem('concurrency');
     const t = localStorage.getItem('timeout');
@@ -346,10 +347,16 @@ function parseLink(link) {
 
         const urlObj = new URL(cleanLink);
         const params = new URLSearchParams(urlObj.search);
-        
+
         const server = params.get('server');
         let port = parseInt(params.get('port'));
-        const secret = params.get('secret');
+        // Read `secret` straight from the raw query, NOT via URLSearchParams:
+        // a base64-standard secret can contain '+', and URLSearchParams decodes
+        // '+' to a space (per the form-encoding spec), which corrupts the secret
+        // and makes a perfectly good proxy fail the check. The link is otherwise
+        // un-encoded, so a direct regex grab is safe.
+        const secretMatch = urlObj.search.match(/[?&]secret=([^&]+)/i);
+        const secret = secretMatch ? secretMatch[1] : null;
 
         if (!server || !port || !secret || isNaN(port)) return null;
         if (port <= 0 || port > 65535) return null;
@@ -361,6 +368,64 @@ function parseLink(link) {
 
         return { server, port, secret, original: cleanLink };
     } catch (e) { return null;     }
+}
+
+// Scan a whole blob of text (e.g. a pasted Telegram message) and pull out every
+// proxy link, even when it is wrapped in other text like
+//   "To SeT : Connect Proxy (https://t.me/proxy?server=...&port=...&secret=...)"
+// Each match is run through parseLink so validation/skip rules stay identical to
+// the one-link-per-line path. Returns an array of parsed proxy objects.
+function extractProxiesFromText(text) {
+    const found = [];
+
+    // Pass 1 — explicit links. Grab a tg:// or t.me/proxy token, stopping at the
+    // first character that can't belong to a link (whitespace, closing paren,
+    // quote, angle bracket) so the trailing ")" / emoji / caption is dropped.
+    const linkRe = /(?:tg:\/\/|https?:\/\/(?:telegram\.me|t\.me)\/)proxy\?[^\s)"'<>\]]+/gi;
+    const linkMatches = text.match(linkRe);
+    if (linkMatches) {
+        for (const tok of linkMatches) {
+            const p = parseLink(tok);
+            if (p) found.push(p);
+        }
+    }
+
+    // Pass 2 — labeled "Server / Port / Secret" blocks with no link, e.g.
+    //   🌐sᴇʀᴠᴇʀ › my.host.com
+    //   🔌 ᴘᴏʀᴛ › 443
+    //   🔓sᴇᴄʀᴇᴛ › ee....
+    // Telegram channels dress the labels up with small-capital unicode letters,
+    // so normalize those to ASCII first, then match (separator ":" or "›").
+    const norm = normalizeSmallCaps(text);
+    const labelRe = /server\s*[:›]?\s*([A-Za-z0-9._-]+)[\s\S]*?port\s*[:›]?\s*(\d{1,5})[\s\S]*?secret\s*[:›]?\s*([A-Za-z0-9_+/=-]{8,})/gi;
+    let m;
+    while ((m = labelRe.exec(norm)) !== null) {
+        let server = m[1].replace(/\.+$/, '');           // drop trailing dots
+        const port = parseInt(m[2], 10);
+        const secret = m[3];
+        if (!server || /^unknown$/i.test(server)) continue;
+        if (!port || port < 1 || port > 65535) continue;
+        if (secret.length > 170 || secret.includes('AAAAAAAAAAAAAAAAAAAA')) { skippedCount++; continue; }
+        found.push({ server, port, secret, original: `tg://proxy?server=${server}&port=${port}&secret=${secret}` });
+    }
+
+    return found;
+}
+
+// Map the small-capital unicode letters channels use to dress up labels
+// (sᴇʀᴠᴇʀ ›) back to ASCII, and strip zero-width marks, so the label regex can
+// read them. Mirrors the backend labelNormalizer.
+const SMALL_CAPS_MAP = {
+    'ᴀ':'a','ʙ':'b','ᴄ':'c','ᴅ':'d','ᴇ':'e','ᴊ':'j','ᴋ':'k','ʟ':'l','ᴍ':'m',
+    'ɴ':'n','ᴏ':'o','ᴘ':'p','ʀ':'r','ᴛ':'t','ᴜ':'u','ᴠ':'v','ɪ':'i','s':'s'
+};
+function normalizeSmallCaps(text) {
+    let out = '';
+    for (const ch of text) {
+        if (ch === '​' || ch === '‎' || ch === '‏' || ch === '﻿') continue;
+        out += SMALL_CAPS_MAP[ch] || ch;
+    }
+    return out;
 }
 
 function openHelp() {
@@ -450,12 +515,14 @@ async function tgPollLoginStatus() {
 }
 
 async function tgStartLogin() {
+    // Empty proxy → log in over a direct connection; reject only invalid links.
+    const proxyRaw = document.getElementById('tgProxyLink').value.trim();
     const creds = tgProxyCreds();
-    if (!creds) return showToast('⚠️ لینک پراکسی MTProto سالم را وارد کنید.', true);
+    if (proxyRaw && !creds) return showToast('⚠️ لینک پراکسی MTProto سالم را وارد کنید.', true);
     const phone = document.getElementById('tgPhone').value.trim();
     if (!phone) return showToast('⚠️ شماره تلفن را وارد کنید.', true);
 
-    const body = { proxy: creds, phone };
+    const body = { proxy: creds || {}, phone };
     const appId = document.getElementById('tgAppId').value.trim();
     const appHash = document.getElementById('tgAppHash').value.trim();
     if (appId && appHash) { body.app_id = Number(appId); body.app_hash = appHash; }
@@ -583,8 +650,12 @@ async function tgLogout() {
 
 async function fetchViaTelegram() {
     const t = translations[currentLang];
+    // An empty proxy field is allowed: the backend then connects to Telegram
+    // directly (for users with unfiltered access). Only a *non-empty but
+    // invalid* link is rejected.
+    const proxyRaw = document.getElementById('tgProxyLink').value.trim();
     const creds = tgProxyCreds();
-    if (!creds) return showToast('⚠️ لینک پراکسی MTProto سالم را وارد کنید.', true);
+    if (proxyRaw && !creds) return showToast('⚠️ لینک پراکسی MTProto سالم را وارد کنید.', true);
 
     const chEl = document.getElementById('inputChannels');
     const channels = dedupeChannels(chEl.value);
@@ -606,14 +677,49 @@ async function fetchViaTelegram() {
     btn.disabled = true;
     btn.innerText = t.fetchingBtn;
     tgSetStatus('در حال دریافت از طریق تلگرام...');
+    setFetchProgress(0, 'اتصال به تلگرام...');
     log(`Fetching ${perChannel === 0 ? 'all' : 'up to ' + perChannel} newest proxies from ${channels.length} channel(s) via Telegram...`);
 
     try {
         const res = await fetch('/fetch-channels-tg', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ channels, proxy: creds, limit: perChannel })
+            body: JSON.stringify({ channels, proxy: creds || {}, limit: perChannel })
         });
-        const data = await res.json();
+        if (!res.ok || !res.body) throw new Error('Server error');
+
+        // Consume the SSE stream: 'progress' events drive the percentage bar,
+        // the final 'done' event carries the full result payload.
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let data = null;
+        outer:
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const frames = buffer.split('\n\n');
+            buffer = frames.pop();
+            for (const frame of frames) {
+                if (!frame.trim()) continue;
+                let eventType = '', dataStr = '';
+                for (const line of frame.split('\n')) {
+                    if (line.startsWith('event: ')) eventType = line.slice(7);
+                    else if (line.startsWith('data: ')) dataStr = line.slice(6);
+                }
+                if (!dataStr) continue;
+                const payload = JSON.parse(dataStr);
+                if (eventType === 'progress') {
+                    const pct = payload.total > 0 ? Math.round((payload.done / payload.total) * 100) : 0;
+                    setFetchProgress(pct, `${pct}% — ${payload.note || ''}`);
+                } else if (eventType === 'done') {
+                    data = payload;
+                    break outer;
+                }
+            }
+        }
+        if (!data) throw new Error('اتصال قطع شد');
+        setFetchProgress(100, '۱۰۰٪');
         const links = data.links || [];
 
         if (data.notes && data.notes.length) {
@@ -646,7 +752,25 @@ async function fetchViaTelegram() {
     } finally {
         btn.disabled = false;
         btn.innerText = t.fetchBtn;
+        // Leave the completed bar visible briefly, then hide it.
+        setTimeout(hideFetchProgress, 1500);
     }
+}
+
+// Drive the channel-fetch progress bar (0-100). Shows the box on first call.
+function setFetchProgress(pct, label) {
+    const box = document.getElementById('tgProgressBox');
+    const bar = document.getElementById('tgProgressBar');
+    const lbl = document.getElementById('tgProgressLabel');
+    if (!box || !bar) return;
+    box.style.display = 'block';
+    bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    if (lbl) lbl.innerText = label || '';
+}
+
+function hideFetchProgress() {
+    const box = document.getElementById('tgProgressBox');
+    if (box) box.style.display = 'none';
 }
 
 function handleStartStop() {
@@ -793,9 +917,14 @@ async function startCheck() {
         checkedKeys = new Set();
         allProxies = [];
 
-        const lines = input.split('\n');
         skippedCount = 0;
-        let validLinks = lines.map(parseLink).filter(l => l !== null);
+        // Two complementary passes so we accept both clean one-per-line lists
+        // AND raw pasted text where links are buried inside other content:
+        //  1) per-line parseLink (handles plain links, even non-t.me hosts),
+        //  2) a whole-text scan that digs proxy links out of surrounding text.
+        // Dedupe below collapses any overlap.
+        let validLinks = input.split('\n').map(parseLink).filter(l => l !== null);
+        validLinks = validLinks.concat(extractProxiesFromText(input));
 
         const seen = new Set();
         const deduped = validLinks.filter(p => {

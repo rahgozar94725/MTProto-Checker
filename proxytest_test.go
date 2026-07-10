@@ -53,7 +53,7 @@ func TestTelegramCheckWorkingProxies(t *testing.T) {
 		}
 		seen[key] = true
 
-		if err := tcpCheck(s, p); err == nil {
+		if err := tcpCheck(s, p, defaultTimeout); err == nil {
 			reachable = append(reachable, proxyInfo{s, p, sec})
 			if len(reachable) >= 2 {
 				break

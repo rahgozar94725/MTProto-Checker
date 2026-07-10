@@ -195,6 +195,29 @@ html[dir="rtl"] .lang-select {
     font-family: var(--font-en);
 }
 
+/* Fetch progress: taller so a percentage/status label fits inside the bar. */
+#tgProgressBox {
+    position: relative;
+    height: 22px;
+    margin-top: 8px;
+}
+
+.progress-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 8px;
+    pointer-events: none;
+}
+
 /* ===== Channels ===== */
 .channels-bar {
     margin-bottom: 16px;

@@ -76,7 +76,7 @@ func TestParseProxyLinks(t *testing.T) {
 }
 
 func TestTcpCheckLocalhost(t *testing.T) {
-	if err := tcpCheck("localhost", 3000); err == nil {
+	if err := tcpCheck("localhost", 3000, defaultTimeout); err == nil {
 		t.Log("port 3000 open (server may be running)")
 	} else {
 		t.Logf("port 3000 closed (%v)", err)
@@ -161,7 +161,7 @@ func TestBatchParseAndTcpCheck(t *testing.T) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			if err := tcpCheck(s, port); err != nil {
+			if err := tcpCheck(s, port, defaultTimeout); err != nil {
 				mu.Lock()
 				if strings.Contains(err.Error(), "no such host") {
 					stats.dnsFail++
@@ -237,7 +237,7 @@ func BenchmarkBatchPipeline(b *testing.B) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				tcpCheck(s, port)
+				tcpCheck(s, port, defaultTimeout)
 			}(p.server, p.port)
 		}
 		wg.Wait()

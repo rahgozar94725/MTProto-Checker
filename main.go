@@ -11,18 +11,20 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/go-faster/errors"
+	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/dcs"
-	"github.com/gotd/td/session"
 )
 
 //go:embed public
@@ -31,21 +33,29 @@ var publicFS embed.FS
 var version = "dev"
 
 const (
-	defaultPort     = 3000
-	testAppID       = 6
-	testAppHash     = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
-	maxBodySize     = 50 * 1024 * 1024
-	maxConcurrency  = 50
-	defaultTimeout  = 5
-	minTimeout      = 3
-	maxTimeout      = 30
-	tcpTimeout      = 1500 * time.Millisecond
+	defaultPort        = 3000
+	testAppID          = 6
+	testAppHash        = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
+	maxBodySize        = 50 * 1024 * 1024
+	maxConcurrency     = 50
+	defaultTimeout     = 10
+	minTimeout         = 3
+	maxTimeout         = 30
+	tcpTimeout         = 1500 * time.Millisecond
 	minTimeoutDuration = time.Duration(minTimeout) * time.Second
-	shutdownTimeout = 5 * time.Second
+	shutdownTimeout    = 5 * time.Second
+
+	// DNS cache tuning. Successful answers are cached for a while; failures are
+	// cached briefly so a dead domain isn't re-resolved on every proxy in a
+	// batch. The entry cap bounds memory on long-running servers.
+	dnsPositiveTTL     = 5 * time.Minute
+	dnsNegativeTTL     = 30 * time.Second
+	maxDNSCacheEntries = 4096
 )
 
 type dnsCacheEntry struct {
 	ips  []net.IP
+	err  error // non-nil for a cached failure (negative entry)
 	next time.Time
 }
 
@@ -54,29 +64,163 @@ var (
 	dnsCache   = make(map[string]*dnsCacheEntry)
 )
 
+// dohEndpoints are DNS-over-HTTPS resolvers used INSTEAD of the system resolver.
+// Many ISPs (notably in Iran) poison DNS for proxy domains, returning a bogus
+// private IP like 10.10.34.34 — connecting there always fails, which is why the
+// checker used to reject healthy proxies that Telegram connects to fine. DoH
+// bypasses the tampered local resolver and returns the real public IPs.
+var dohEndpoints = []string{
+	"https://1.1.1.1/dns-query",
+	"https://8.8.8.8/resolve",
+	"https://1.0.0.1/dns-query",
+	"https://8.8.4.4/resolve",
+}
+
+var dohClient = &http.Client{Timeout: 6 * time.Second}
+
+// isUsableIP rejects private / loopback / link-local answers. A public domain
+// resolving to 10.10.34.34 (or similar) is a hijacked answer, not a real one.
+func isUsableIP(ip net.IP) bool {
+	if ip == nil || ip.IsLoopback() || ip.IsPrivate() ||
+		ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
+		return false
+	}
+	return true
+}
+
+// dnsTypeA / dnsTypeAAAA are the DNS record type numbers returned in the JSON
+// "Answer[].type" field.
+const (
+	dnsTypeA    = 1
+	dnsTypeAAAA = 28
+)
+
+// dohQuery asks a single DoH endpoint for one record type and returns the
+// usable (public) IPs it reports.
+func dohQuery(base, host string, qtype int) ([]net.IP, error) {
+	typeName := "A"
+	if qtype == dnsTypeAAAA {
+		typeName = "AAAA"
+	}
+	req, err := http.NewRequest("GET", base+"?name="+url.QueryEscape(host)+"&type="+typeName, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/dns-json")
+	resp, err := dohClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	var body struct {
+		Answer []struct {
+			Type int    `json:"type"`
+			Data string `json:"data"`
+		} `json:"Answer"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	var ips []net.IP
+	for _, a := range body.Answer {
+		if a.Type != qtype {
+			continue
+		}
+		if ip := net.ParseIP(a.Data); isUsableIP(ip) {
+			ips = append(ips, ip)
+		}
+	}
+	return ips, nil
+}
+
+// dohLookup resolves host over DNS-over-HTTPS, trying each endpoint and
+// preferring IPv4 (A) but falling back to IPv6 (AAAA) so v6-only proxies are
+// not wrongly reported dead. The first endpoint that yields any usable IP wins.
+func dohLookup(host string) ([]net.IP, error) {
+	var lastErr error
+	for _, base := range dohEndpoints {
+		for _, qtype := range []int{dnsTypeA, dnsTypeAAAA} {
+			ips, err := dohQuery(base, host, qtype)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			if len(ips) > 0 {
+				return ips, nil
+			}
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.Errorf("no usable A/AAAA records for %q", host)
+	}
+	return nil, lastErr
+}
+
+// storeDNS caches a lookup result (positive or negative) and bounds the cache
+// size. Caller must NOT hold dnsCacheMu.
+func storeDNS(host string, ips []net.IP, lookupErr error) {
+	ttl := dnsPositiveTTL
+	if lookupErr != nil {
+		ttl = dnsNegativeTTL
+	}
+	dnsCacheMu.Lock()
+	defer dnsCacheMu.Unlock()
+	// Bound memory: once the cache is full, drop expired entries; if that isn't
+	// enough (all still fresh), clear it wholesale. Cheap and correct for a
+	// local tool — the map simply repopulates on demand.
+	if len(dnsCache) >= maxDNSCacheEntries {
+		now := time.Now()
+		for k, e := range dnsCache {
+			if now.After(e.next) {
+				delete(dnsCache, k)
+			}
+		}
+		if len(dnsCache) >= maxDNSCacheEntries {
+			dnsCache = make(map[string]*dnsCacheEntry, maxDNSCacheEntries)
+		}
+	}
+	dnsCache[host] = &dnsCacheEntry{ips: ips, err: lookupErr, next: time.Now().Add(ttl)}
+}
+
 func cachedLookupHost(host string) ([]net.IP, error) {
+	// Already an IP literal — nothing to resolve.
+	if ip := net.ParseIP(host); ip != nil {
+		return []net.IP{ip}, nil
+	}
+
 	dnsCacheMu.RLock()
 	entry, ok := dnsCache[host]
 	dnsCacheMu.RUnlock()
 	if ok && time.Now().Before(entry.next) {
-		return entry.ips, nil
+		return entry.ips, entry.err
 	}
 
-	dnsCtx, dnsCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer dnsCancel()
-	var resolver net.Resolver
-	ipAddrs, err := resolver.LookupIPAddr(dnsCtx, host)
+	ips, err := dohLookup(host)
 	if err != nil {
-		return nil, err
-	}
-	ips := make([]net.IP, len(ipAddrs))
-	for i, a := range ipAddrs {
-		ips[i] = a.IP
+		// Fall back to the system resolver, but drop hijacked private answers so
+		// we never hand back a bogus 10.x address.
+		var resolver net.Resolver
+		dnsCtx, dnsCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ipAddrs, sysErr := resolver.LookupIPAddr(dnsCtx, host)
+		dnsCancel()
+		if sysErr != nil {
+			storeDNS(host, nil, err)
+			return nil, err
+		}
+		for _, a := range ipAddrs {
+			if isUsableIP(a.IP) {
+				ips = append(ips, a.IP)
+			}
+		}
+		if len(ips) == 0 {
+			finalErr := errors.Errorf("no usable IP for %q (DNS may be hijacked)", host)
+			storeDNS(host, nil, finalErr)
+			return nil, finalErr
+		}
 	}
 
-	dnsCacheMu.Lock()
-	dnsCache[host] = &dnsCacheEntry{ips: ips, next: time.Now().Add(5 * time.Minute)}
-	dnsCacheMu.Unlock()
+	storeDNS(host, ips, nil)
 	return ips, nil
 }
 
@@ -106,18 +250,44 @@ func decodeSecret(s string) ([]byte, error) {
 	return nil, errors.Errorf("unable to decode secret %q as hex or base64url", s)
 }
 
-func tcpCheck(server string, port int) error {
-	_, err := cachedLookupHost(server)
-	if err != nil {
-		return err
+// tcpCheck is the fast pre-check: it only needs to know whether *some* IP for
+// the proxy accepts a TCP connection. It delegates to reachableAddr and
+// discards the address. The old 1.5s fixed dial timeout wrongly rejected
+// working proxies on distant servers that simply need >1.5s to handshake, so
+// the pre-check gets a real share of the user's budget (with a sane floor).
+func tcpCheck(server string, port int, timeoutSec int) error {
+	dial := time.Duration(timeoutSec) * time.Second / 2
+	if dial < tcpTimeout {
+		dial = tcpTimeout
 	}
-	addr := net.JoinHostPort(server, fmt.Sprintf("%d", port))
-	conn, err := net.DialTimeout("tcp", addr, tcpTimeout)
+	_, err := reachableAddr(server, port, dial)
+	return err
+}
+
+// reachableAddr resolves server via DoH and returns the first IP:port that
+// accepts a TCP connection, so the MTProto check runs against a real, live IP
+// rather than a poisoned DNS answer or a dead address in the rotation. A domain
+// often resolves to many IPs; it tries them in turn so a single dead IP doesn't
+// sink an otherwise-healthy proxy.
+func reachableAddr(server string, port int, dial time.Duration) (string, error) {
+	ips, err := cachedLookupHost(server)
 	if err != nil {
-		return err
+		return "", err
 	}
-	conn.Close()
-	return nil
+	portStr := strconv.Itoa(port)
+	for _, ip := range ips {
+		addr := net.JoinHostPort(ip.String(), portStr)
+		conn, dialErr := net.DialTimeout("tcp", addr, dial)
+		if dialErr == nil {
+			conn.Close()
+			return addr, nil
+		}
+		err = dialErr
+	}
+	if err == nil {
+		err = errors.Errorf("no reachable IP for %s:%d", server, port)
+	}
+	return "", err
 }
 
 func checkProxy(ctx context.Context, server string, port int, secret string, timeoutSec int) (ping int64, err error) {
@@ -128,11 +298,22 @@ func checkProxy(ctx context.Context, server string, port int, secret string, tim
 		}
 	}()
 
-	addr := net.JoinHostPort(server, fmt.Sprintf("%d", port))
-
 	decodedSecret, err := decodeSecret(secret)
 	if err != nil {
 		return 0, errors.Wrap(err, "decode secret")
+	}
+
+	// Resolve via DoH and pick a live IP ourselves. If we passed the hostname to
+	// gotd it would re-resolve through the (possibly hijacked) system DNS. For
+	// fake-TLS the SNI comes from the secret's embedded domain, not this address,
+	// so connecting straight to the real IP is correct.
+	dial := time.Duration(timeoutSec) * time.Second / 3
+	if dial < tcpTimeout {
+		dial = tcpTimeout
+	}
+	addr, err := reachableAddr(server, port, dial)
+	if err != nil {
+		return 0, errors.Wrap(err, "resolve/connect")
 	}
 
 	resolver, err := dcs.MTProxy(addr, decodedSecret, dcs.MTProxyOptions{})
@@ -147,11 +328,26 @@ func checkProxy(ctx context.Context, server string, port int, secret string, tim
 	// A per-call store forces a clean handshake from scratch, which is the point.
 	localSession := &session.StorageMemory{}
 
+	// Give the TCP dial and the MTProto key exchange a fair share of the overall
+	// budget instead of the old fixed 3s/2s. A 2s exchange window in particular
+	// wrongly failed plenty of proxies that Telegram itself connects to fine —
+	// their handshake just needs more than 2s over a slow/high-latency link.
+	total := time.Duration(timeoutSec) * time.Second
+	// TCP connect is quick when it works; cap the dial so it can't eat the whole
+	// budget, but keep at least the old 3s floor.
+	dialTimeout := total / 3
+	if dialTimeout < minTimeoutDuration {
+		dialTimeout = minTimeoutDuration
+	}
+	// Let the handshake use whatever is left of the budget — the overall context
+	// below is the real bound. This is the value that matters for false rejects.
+	exchangeTimeout := total
+
 	client := telegram.NewClient(testAppID, testAppHash, telegram.Options{
 		Resolver:        resolver,
 		SessionStorage:  localSession,
-		DialTimeout:     minTimeoutDuration,
-		ExchangeTimeout: 2 * time.Second,
+		DialTimeout:     dialTimeout,
+		ExchangeTimeout: exchangeTimeout,
 		NoUpdates:       true,
 		Device:          telegram.DeviceTDesktopWindows(),
 	})
@@ -253,7 +449,7 @@ func main() {
 		elapsed := time.Since(start)
 
 		if err != nil {
-			log.Printf("CHECK FAIL %s:%d timeout=%ds (%v)", req.Server, req.Port, timeout, elapsed)
+			log.Printf("CHECK FAIL %s:%d timeout=%ds (%v) err=%v", req.Server, req.Port, timeout, elapsed, err)
 			jsonResponse(w, http.StatusOK, CheckResponse{OK: false})
 		} else {
 			log.Printf("CHECK OK   %s:%d %dms timeout=%ds (%v)", req.Server, req.Port, ping, timeout, elapsed)
@@ -315,7 +511,7 @@ func main() {
 				tcpSem <- struct{}{}
 				defer func() { <-tcpSem }()
 
-				if err := tcpCheck(proxy.Server, proxy.Port); err != nil {
+				if err := tcpCheck(proxy.Server, proxy.Port, timeout); err != nil {
 					results[idx] = CheckResponse{OK: false}
 				} else {
 					reachableMu.Lock()
@@ -345,6 +541,7 @@ func main() {
 				}
 				ping, err := checkProxy(r.Context(), item.req.Server, item.req.Port, item.req.Secret, t)
 				if err != nil {
+					log.Printf("BATCH FAIL %s:%d telegram (%v)", item.req.Server, item.req.Port, err)
 					results[item.idx] = CheckResponse{OK: false}
 				} else {
 					results[item.idx] = CheckResponse{OK: true, Ping: ping}
@@ -379,6 +576,12 @@ func main() {
 		if !ok {
 			jsonResponse(w, http.StatusInternalServerError, map[string]string{"error": "streaming not supported"})
 			return
+		}
+		// Long-lived SSE stream: clear the server's global WriteTimeout so a large
+		// proxy list (which can take minutes at low concurrency) isn't cut off
+		// mid-stream.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+			log.Printf("WARN: could not clear write deadline for /check-stream: %v", err)
 		}
 
 		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
@@ -446,8 +649,9 @@ func main() {
 					t = timeout
 				}
 
-				err := tcpCheck(proxy.Server, proxy.Port)
+				err := tcpCheck(proxy.Server, proxy.Port, t)
 				if err != nil {
+					log.Printf("STREAM FAIL %s:%d tcp (%v)", proxy.Server, proxy.Port, err)
 					mu.Lock()
 					completed++
 					sendEvent("progress", &strProgress{
@@ -486,6 +690,7 @@ func main() {
 				mu.Lock()
 				completed++
 				if tgErr != nil {
+					log.Printf("STREAM FAIL %s:%d telegram (%v)", proxy.Server, proxy.Port, tgErr)
 					sendEvent("progress", &strProgress{
 						Completed: completed, Total: total, Working: working,
 						Server: proxy.Server, Port: proxy.Port, Secret: proxy.Secret,
@@ -685,15 +890,41 @@ func main() {
 			jsonResponse(w, http.StatusBadRequest, FetchChannelsResponse{Errors: []string{"invalid request"}})
 			return
 		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			jsonResponse(w, http.StatusInternalServerError, FetchChannelsResponse{Errors: []string{"streaming not supported"}})
+			return
+		}
+		// Long-lived SSE stream (channel scan can run up to tgFetchTimeout); clear
+		// the server's global WriteTimeout so it isn't cut off mid-stream.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+			log.Printf("WARN: could not clear write deadline for /fetch-channels-tg: %v", err)
+		}
+
+		var mu sync.Mutex
+		sendEvent := func(event string, v interface{}) {
+			data, _ := json.Marshal(v)
+			mu.Lock()
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data)
+			flusher.Flush()
+			mu.Unlock()
+		}
+
 		log.Printf("FETCH-TG START %d channels via %s:%d", len(req.Channels), req.Proxy.Server, req.Proxy.Port)
 		start := time.Now()
-		resp, err := fetchChannelsViaTelegram(r.Context(), req)
+		resp, err := fetchChannelsViaTelegram(r.Context(), req, func(done, total int, note string) {
+			sendEvent("progress", map[string]interface{}{"done": done, "total": total, "note": note})
+		})
 		if err != nil {
-			jsonResponse(w, http.StatusOK, FetchChannelsResponse{Errors: []string{err.Error()}})
+			sendEvent("done", FetchChannelsResponse{Errors: []string{err.Error()}})
 			return
 		}
 		log.Printf("FETCH-TG DONE %d links (%v)", resp.Count, time.Since(start))
-		jsonResponse(w, http.StatusOK, resp)
+		sendEvent("done", resp)
 	}))
 
 	embeddedFS, err := fs.Sub(publicFS, "public")
@@ -702,8 +933,15 @@ func main() {
 	}
 	mux.Handle("/", http.FileServer(http.FS(embeddedFS)))
 
-	addr := fmt.Sprintf(":%d", port)
-	log.Printf("Server running at http://localhost:%d", port)
+	// Bind to loopback by default: this server holds a real Telegram user session
+	// (see /tg/login/*), so it must not be reachable from the LAN unless the user
+	// explicitly opts in. Set HOST=0.0.0.0 to expose it.
+	host := os.Getenv("HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	log.Printf("Server running at http://%s", addr)
 
 	srv := &http.Server{
 		Addr:         addr,

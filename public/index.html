@@ -44,9 +44,9 @@
             <div class="setting-item">
                 <label data-i18n="timeoutLabel">تایم‌اوت (ثانیه)</label>
                 <select id="timeoutSelect">
-                    <option value="5" selected>5s</option>
+                    <option value="5">5s</option>
                     <option value="8">8s</option>
-                    <option value="10">10s</option>
+                    <option value="10" selected>10s</option>
                     <option value="15">15s</option>
                     <option value="20">20s</option>
                 </select>
@@ -64,6 +64,7 @@
             <div class="btn-row">
                 <button class="btn-fetch" id="fetchBtn" onclick="fetchViaTelegram()" data-i18n="fetchBtn">⬇ دریافت پراکسی از کانال‌ها</button>
             </div>
+            <div class="progress-box" id="tgProgressBox" style="display:none"><div class="progress-bar" id="tgProgressBar"></div><span class="progress-label" id="tgProgressLabel"></span></div>
 
             <details class="tg-section" id="tgSection">
                 <summary data-i18n="tgSummary">🔐 ورود به حساب تلگرام (یک‌بار لازم است)</summary>

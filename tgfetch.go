@@ -126,10 +126,16 @@ func saveAppCreds(id int, hash string) error {
 // ----------------------------------------------------------------------------
 
 // buildMTProxyResolver creates a gotd DC resolver that tunnels through an
-// MTProto proxy. Empty server falls back to the default (direct) resolver.
+// MTProto proxy. When no proxy is supplied (all three fields empty) it returns
+// a nil resolver, which makes gotd connect to Telegram directly — useful when
+// the user already has unfiltered access (VPN, no censorship) and just wants to
+// pull proxies from channels without first having a working proxy in hand.
 func buildMTProxyResolver(server string, port int, secret string) (dcs.Resolver, error) {
+	if server == "" && port == 0 && secret == "" {
+		return nil, nil // direct connection
+	}
 	if server == "" || port == 0 || secret == "" {
-		return nil, errors.New("a working MTProto proxy (server, port, secret) is required")
+		return nil, errors.New("incomplete MTProto proxy: server, port and secret are all required")
 	}
 	addr := net.JoinHostPort(server, fmt.Sprintf("%d", port))
 	decodedSecret, err := decodeSecret(secret)
@@ -776,7 +782,10 @@ type FetchTGRequest struct {
 
 // fetchChannelsViaTelegram opens one authenticated client (through the given
 // MTProto proxy) and pulls proxy links from each channel's recent history.
-func fetchChannelsViaTelegram(ctx context.Context, req FetchTGRequest) (FetchChannelsResponse, error) {
+// onProgress, if non-nil, is invoked once before connecting (done=0) and once
+// after every channel is processed (done=1..total). It lets the HTTP layer push
+// a live percentage to the browser. note is a short human-readable status line.
+func fetchChannelsViaTelegram(ctx context.Context, req FetchTGRequest, onProgress func(done, total int, note string)) (FetchChannelsResponse, error) {
 	// perChannel is the max proxies taken from each channel; <= 0 means "all"
 	// (bounded by the message-scan safety cap), > perChannelMax is clamped.
 	perChannel := req.Limit
@@ -807,6 +816,14 @@ func fetchChannelsViaTelegram(ctx context.Context, req FetchTGRequest) (FetchCha
 	if len(channels) == 0 {
 		return FetchChannelsResponse{}, errors.New("no valid channels provided")
 	}
+
+	total := len(channels)
+	progress := func(done int, note string) {
+		if onProgress != nil {
+			onProgress(done, total, note)
+		}
+	}
+	progress(0, "اتصال به تلگرام...")
 
 	resolver, err := buildMTProxyResolver(req.Proxy.Server, req.Proxy.Port, req.Proxy.Secret)
 	if err != nil {
@@ -840,10 +857,11 @@ func fetchChannelsViaTelegram(ctx context.Context, req FetchTGRequest) (FetchCha
 		}
 
 		api := client.API()
-		for _, ch := range channels {
+		for i, ch := range channels {
 			links, stats, err := fetchChannelViaTG(ctx, api, ch, perChannel)
 			if err != nil {
 				resp.Errors = append(resp.Errors, fmt.Sprintf("%s: %v", ch, err))
+				progress(i+1, fmt.Sprintf("@%s: خطا", ch))
 				continue
 			}
 			added := 0
@@ -860,6 +878,7 @@ func fetchChannelsViaTelegram(ctx context.Context, req FetchTGRequest) (FetchCha
 			resp.Notes = append(resp.Notes, fmt.Sprintf(
 				"%s: %d new | %d unique found | %d/%d msgs had a proxy | stop=%s",
 				ch, added, stats.found, stats.withProxy, stats.scanned, stats.stop))
+			progress(i+1, fmt.Sprintf("@%s: %d پراکسی جدید (مجموع %d)", ch, added, len(resp.Links)))
 		}
 		return nil
 	})
