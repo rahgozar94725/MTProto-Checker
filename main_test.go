@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
@@ -32,6 +35,27 @@ func TestDecodeSecret(t *testing.T) {
 
 	if _, err := decodeSecret("eeRigzNJvxrFGRMCIMJdEKuVuRueWVrdGFuZXQuY29tZmFyYXqhdi5jb212YW4ubmFqdmEuY29tAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)"); err != nil {
 		t.Errorf("decodeSecret with trailing junk: %v", err)
+	}
+
+	// A fake-TLS secret (ee + 16 bytes + domain) encoded in STANDARD base64 — its
+	// alphabet uses + and /. The old decoder only understood the URL alphabet and
+	// wrongly rejected these healthy proxies. Every encoding of the SAME bytes must
+	// decode to the SAME result.
+	rawSecret := []byte{0xee, 0xfb, 0xef, 0xff, 0x3e, 0x3f, 0xf8, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a}
+	rawSecret = append(rawSecret, []byte("cloudflare.com")...)
+	for name, form := range map[string]string{
+		"hex":       hex.EncodeToString(rawSecret),
+		"base64std": base64.StdEncoding.EncodeToString(rawSecret),     // contains + and /
+		"base64url": base64.RawURLEncoding.EncodeToString(rawSecret),  // contains - and _
+	} {
+		got, err := decodeSecret(form)
+		if err != nil {
+			t.Errorf("decodeSecret(%s=%q) err=%v", name, form, err)
+			continue
+		}
+		if !bytes.Equal(got, rawSecret) {
+			t.Errorf("decodeSecret(%s) = %x, want %x", name, got, rawSecret)
+		}
 	}
 }
 

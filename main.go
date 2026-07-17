@@ -237,17 +237,37 @@ type CheckResponse struct {
 }
 
 func decodeSecret(s string) ([]byte, error) {
-	s = strings.TrimRight(s, "!@#$%^&*()_+`~[]{}|;:',.<>?/ \t\n\r")
+	s = strings.TrimSpace(s)
+	// Some channels append a label or flag after the secret: "<secret>#name" or
+	// "<secret>**". Cut those off before decoding.
+	if i := strings.Index(s, "**"); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.IndexByte(s, '#'); i >= 0 {
+		s = s[:i]
+	}
+	// Strip trailing wrapper punctuation (a stray ")", quote, bracket, etc.) but
+	// deliberately keep +, /, _, -, = — those are valid base64 payload/padding
+	// characters, and stripping them corrupts an otherwise-healthy secret. The old
+	// trim set included _, + and /, which silently mangled base64 secrets.
+	s = strings.TrimRight(s, "!@#$%^&*()`~[]{}|;:',.<>? \t\n\r")
+
 	if b, err := hex.DecodeString(s); err == nil {
 		return b, nil
 	}
-	if b, err := base64.RawURLEncoding.DecodeString(s); err == nil {
-		return b, nil
+	// base64 in every common variant — URL and standard alphabets, raw and padded.
+	// Standard base64 (with + and /) is widely used in proxy channels; the old
+	// code only tried the URL alphabet, so it rejected those healthy proxies
+	// outright with a "decode" error.
+	for _, enc := range []*base64.Encoding{
+		base64.RawURLEncoding, base64.URLEncoding,
+		base64.RawStdEncoding, base64.StdEncoding,
+	} {
+		if b, err := enc.DecodeString(s); err == nil {
+			return b, nil
+		}
 	}
-	if b, err := base64.URLEncoding.DecodeString(s); err == nil {
-		return b, nil
-	}
-	return nil, errors.Errorf("unable to decode secret %q as hex or base64url", s)
+	return nil, errors.Errorf("unable to decode secret %q as hex or base64", s)
 }
 
 // tcpCheck is the fast pre-check: it only needs to know whether *some* IP for
