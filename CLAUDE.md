@@ -21,7 +21,7 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-X main.version=v0.0.0-
 
 A host build (`go1.26.4 windows/amd64`) produces a 21,616,640-byte (~20.6 MiB) binary with `public/` baked in.
 
-**Formatting:** `gofmt -l .` lists all three Go files — `main.go`, `main_test.go`, `proxytest_test.go` — but that is mostly line endings: the sources are committed with CRLF, which `gofmt` rewrites to LF. Normalize line endings first and only `main.go` remains flagged, for genuine drift (import `github.com/gotd/td/session` sorted after `dcs`; `const` block alignment). So `gofmt -l` output is not a usable formatting signal on this repo as-is.
+**Formatting:** the repository stores Go sources with LF (`git show HEAD:main.go` contains zero CR bytes). On a Windows checkout with `core.autocrlf=true` the working copy is CRLF, and `gofmt -l .` then flags all three Go files — `main.go`, `main_test.go`, `proxytest_test.go` — on line endings alone. On an LF checkout only `main.go` remains flagged, for real drift (import `github.com/gotd/td/session` sorted after `dcs`; `const` block alignment). There is no `.gitattributes`; adding one with `*.go text eol=lf` would make `gofmt -l` meaningful on every platform — a future task, not done here.
 
 No linter, no formatter config, no test CI. Only CI is `.github/workflows/release.yml`, triggered by `push` of a `v*` tag: cross-compiles 5 platforms (windows/linux/darwin × amd64/arm64, `CGO_ENABLED=0`), injects `-X main.version=<tag>`, uploads to GitHub Releases with a changelog generated from `git log <prev-tag>..<tag>`.
 
@@ -36,12 +36,12 @@ Single-process Go server (`main.go`, ~515 lines) + vanilla-JS frontend embedded 
 
 `public/` is baked in with `//go:embed public` + `fs.Sub` and served by `http.FileServer` at `/`. Nothing is read from disk at runtime — editing `public/` requires a rebuild (or `go run .`) to take effect.
 
-**Proxy verification** (`checkProxy`) is a real MTProto handshake, not a TCP ping: `dcs.MTProxy(addr, secret)` resolver → `telegram.NewClient` with public test creds (`testAppID = 6`, `testAppHash = "eb06d4…"`, hardcoded in `main.go`, intentionally public — no login required) → `help.getNearestDC`. Round-trip time of that call is the reported ping. It carries its own `recover()` on top of the middleware because gotd can panic on malformed proxy responses.
+**Proxy verification** (`checkProxy`) is a real MTProto handshake, not a TCP ping: `dcs.MTProxy(addr, secret)` resolver → `telegram.NewClient` with public test creds (`testAppID = 6`, `testAppHash = "eb06d4…"`, hardcoded in `main.go`, intentionally public — no login required) → `help.getNearestDC`. Round-trip time of that call is the reported ping. It carries its own `recover()` in addition to the middleware's; the reason is not recorded anywhere in the repo.
 
 `decodeSecret` right-trims a set of punctuation/whitespace junk, then tries hex → base64 RawURL → base64 URL in order.
 
 **Shared mutable state to be careful with:**
-- `sharedSession` (`session.StorageMemory`) is a package-level singleton reused by every check so the auth key is negotiated once. Tests needing isolation reassign it (`sharedSession = &session.StorageMemory{}`).
+- `sharedSession` — one package-level `session.StorageMemory` shared across concurrent checks of different proxies and different DCs. Why it is shared is not documented, and the correctness impact of that sharing has not been verified. Tests wanting isolation reassign it (`sharedSession = &session.StorageMemory{}`).
 - `dnsCache` — `map[string]*dnsCacheEntry` behind `dnsCacheMu`, 5-min TTL, consulted by `tcpCheck` before dialing.
 
 **Timeout layering** (four levels, don't collapse them): UI-selected `timeout` clamped to 3–30s (`defaultTimeout = 5`) bounds the gotd context; `/check-stream` wraps that in a hard `t+10s` context so a stuck proxy can never wedge a goroutine; `tcpTimeout` is a fixed 1.5s dial; the client also arms its own `(timeout+30)*1000 + 120000` ms abort on the whole stream. Server `WriteTimeout` is 300s to keep long SSE streams alive; shutdown is `SIGINT`/`SIGTERM` → `srv.Shutdown` with a 5s context.
@@ -61,7 +61,7 @@ Single-process Go server (`main.go`, ~515 lines) + vanilla-JS frontend embedded 
 - Commits follow Conventional Commits: `feat`/`fix`/`chore`/`build`/`refactor`, optional scope — `feat(i18n):`, `fix(release):`, `refactor(frontend):`.
 - Key files: `main.go` (server, all handlers) · `public/index.html` (markup + inline handlers) · `public/js/script.js` (all frontend logic + i18n) · `public/js/helpers.js` (dead, see below) · `public/css/{tokens,base,components}.css` (load order matters) · `main_test.go` + `proxytest_test.go` (Go tests) · `.github/workflows/release.yml` (only CI).
 - `SPEC.md` carries the intended behavior contract: constraints (`C*`), invariants (`V*`), tasks (`T*`), bugs (`B*`). Behavior changes should update the matching invariant; new bugs get a `§B` row.
-- Four READMEs (`README.md`, `_FA`, `_RU`, `_ZH`) are kept in sync; the in-app Help button opens the one matching the current UI language.
+- Four READMEs (`README.md`, `_FA`, `_RU`, `_ZH`) are intended to be kept in sync — not verified, and they already differ in length (`README_FA.md` is 77 lines against 85 for the other three). The in-app Help button opens the one matching the current UI language.
 
 ## Known drift and defects (current state — do not "fix" as a side effect)
 
@@ -77,6 +77,6 @@ Single-process Go server (`main.go`, ~515 lines) + vanilla-JS frontend embedded 
 - **Tests depend on a proxy list that is not in the repo.** `main_test.go` and `proxytest_test.go` read `testdata/proxies.txt` and `t.Skip` when it is absent, so `go test ./...` is largely a no-op on a fresh clone.
 - **Version declarations disagree:** `go.mod` says `go 1.26.3`; the README and the release workflow say Go 1.18+.
 - **No HTTP handler tests.** Six test functions exist and none uses `httptest`; `/check`, `/check-batch`, `/check-stream` and `recoverMiddleware` have zero coverage. `checkProxy` is exercised only by a live-network test that skips when the local proxy list is absent.
-- **`main.go` is not gofmt-clean** (import order, const block alignment), independent of the CRLF line endings that make `gofmt -l` flag all three files.
+- **`main.go` is not gofmt-clean** (import order, const block alignment). This is real drift in the committed LF source, separate from the working-copy CRLF that makes `gofmt -l` flag all three files on an `autocrlf=true` checkout.
 
 Every item above is documentation of current state. Fixes go through brainstorming → plan first, not opportunistic edits.
