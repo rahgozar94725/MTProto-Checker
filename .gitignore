@@ -3,3 +3,9 @@ graphify-out/
 
 # Go
 mtproto-checker.exe
+
+# Local-only helper script
+filter.sh
+
+# Agent-local notes, not shared with the team
+.claude.local.md
