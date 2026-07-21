@@ -61,6 +61,6 @@ jobs:
   # which version that SHA is.
   release:
     needs: build
-    uses: rahgozar94725/release-workflows/.github/workflows/release.yml@1e1e8afd37e72cb0baad72fdd4fbb7c71e927b3b  # v1.0.0
+    uses: rahgozar94725/release-workflows/.github/workflows/release.yml@e17e401b6ffd76ba9ab7fffb59ea9a5ce0954711  # v2.0.0
     with:
       artifact-glob: 'binary-*/*'
