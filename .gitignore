@@ -3,6 +3,9 @@
 # Go
 mtproto-checker.exe
 
+# Generated in CI by git-cliff, never committed
+RELEASE_NOTES.md
+
 # Local-only helper script
 filter.sh
 

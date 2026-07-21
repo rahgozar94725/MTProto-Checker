@@ -52,43 +52,15 @@ jobs:
           name: binary-${{ matrix.os }}-${{ matrix.arch }}
           path: mtproto-checker-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
 
+  # Release notes and publishing live in the shared workflow. It renders
+  # cliff.toml from this repository at the tag being built, guards the result,
+  # and creates the release with the artifacts uploaded above.
+  #
+  # Pinned by SHA, not by tag: a moving ref would let the workflow repository
+  # repoint this project at code it never reviewed. The trailing comment says
+  # which version that SHA is.
   release:
     needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          PREV_TAG=$(git tag --sort=-v:refname | sed -n '2p')
-          if [ -z "$PREV_TAG" ]; then
-            echo "notes=Initial release" >> $GITHUB_OUTPUT
-            echo "prev=" >> $GITHUB_OUTPUT
-          else
-            LOG=$(git log $PREV_TAG..${{ github.ref_name }} --oneline --no-decorate)
-            echo "prev=$PREV_TAG" >> $GITHUB_OUTPUT
-            echo "notes<<EOF" >> $GITHUB_OUTPUT
-            echo "$LOG" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-
-      - name: List files
-        run: find . -name 'mtproto-checker-*' -type f
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: binary-*/*
-          body: |
-            ## What's Changed
-
-            ${{ steps.changelog.outputs.notes }}
-
-            **Full changelog:** https://github.com/${{ github.repository }}/compare/${{ steps.changelog.outputs.prev }}...${{ github.ref_name }}
+    uses: rahgozar94725/release-workflows/.github/workflows/release.yml@1e1e8afd37e72cb0baad72fdd4fbb7c71e927b3b  # v1.0.0
+    with:
+      artifact-glob: 'binary-*/*'

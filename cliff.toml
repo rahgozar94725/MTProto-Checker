@@ -1,0 +1,72 @@
+# git-cliff configuration — categorized, linked release notes from Conventional
+# Commits.
+#
+# Copied from rahgozar94725/release-workflows, which also hosts the reusable
+# workflow that consumes it. See .github/workflows/release.yml here for the
+# SHA-pinned version this repository calls, and that repository's docs/design.md
+# for why the invocation and its guards are shaped the way they are.
+#
+# Read at release time by that workflow, from the tag being built. It refuses to
+# run if this file is missing from the tag, because git-cliff would otherwise
+# fall back to its built-in default — no commit links, different group names —
+# with one WARN and exit 0.
+#
+# The repository URL is derived from --github-repo, which the workflow passes as
+# ${{ github.repository }}. Do not hardcode it: a hardcoded URL silently keeps
+# rendering the wrong repository's links after a fork or a rename, and the
+# workflow's guard cannot tell the difference.
+
+[changelog]
+header = ""
+
+# Rendered once per release. Groups carry a `<!-- N -->` sort prefix that is
+# stripped before display; git-cliff orders groups by the raw string, so the
+# prefix is what fixes Features → Bug Fixes → Refactor → Build → Misc.
+body = """
+{% set repo = "https://github.com/" ~ remote.github.owner ~ "/" ~ remote.github.repo -%}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+{{ commit.message | upper_first }} \
+([{{ commit.id | truncate(length=7, end="") }}]({{ repo }}/commit/{{ commit.id }}))
+{%- endfor %}
+{% endfor %}
+{% if previous and previous.version and version %}
+**Full Changelog**: {{ repo }}/compare/{{ previous.version }}...{{ version }}
+{% endif %}
+"""
+
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+
+# Without this file git-cliff falls back to its built-in configuration, which
+# still renders every commit but emits no commit links and uses different group
+# names. That fallback is silent — one WARN, exit 0 — which is why the release
+# workflow both refuses to run when this file is missing and asserts that every
+# rendered bullet carries a commit link under the calling repository.
+filter_unconventional = false
+filter_commits = false
+
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->🚀 Features" },
+  { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
+  { message = "^perf", group = "<!-- 2 -->⚡ Performance" },
+  { message = "^refactor", group = "<!-- 3 -->🚜 Refactor" },
+  { message = "^docs", group = "<!-- 4 -->📚 Documentation" },
+  { message = "^test", group = "<!-- 5 -->🧪 Testing" },
+  { message = "^build", group = "<!-- 6 -->🏗️ Build" },
+  { message = "^ci", group = "<!-- 7 -->⚙️ CI" },
+  { message = "^chore", group = "<!-- 8 -->🧹 Misc" },
+  { message = ".*", group = "<!-- 8 -->🧹 Misc" },
+]
+
+protect_breaking_commits = false
+split_commits = false
+
+# Deterministic ordering: same range always renders identically.
+topo_order = false
+sort_commits = "oldest"
