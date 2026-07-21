@@ -59,6 +59,7 @@ Single-process Go server (`main.go`, ~515 lines) + vanilla-JS frontend embedded 
 ## Repo conventions
 
 - Commits follow Conventional Commits: `feat`/`fix`/`chore`/`build`/`refactor`, optional scope — `feat(i18n):`, `fix(release):`, `refactor(frontend):`.
+- Contributions from forks must be rebased onto current `main` or cherry-picked — never merged with the GitHub merge button. Older forks carry a divergent history.
 - Key files: `main.go` (server, all handlers) · `public/index.html` (markup + inline handlers) · `public/js/script.js` (all frontend logic + i18n) · `public/js/helpers.js` (dead, see below) · `public/css/{tokens,base,components}.css` (load order matters) · `main_test.go` + `proxytest_test.go` (Go tests) · `.github/workflows/release.yml` (only CI).
 - `SPEC.md` carries the intended behavior contract: constraints (`C*`), invariants (`V*`), tasks (`T*`), bugs (`B*`). Behavior changes should update the matching invariant; new bugs get a `§B` row.
 - Four READMEs (`README.md`, `_FA`, `_RU`, `_ZH`) are intended to be kept in sync — not verified, and they already differ in length (`README_FA.md` is 77 lines against 85 for the other three). The in-app Help button opens the one matching the current UI language.
