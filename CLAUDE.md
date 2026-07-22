@@ -66,6 +66,7 @@ Single-process Go server (`main.go`, ~600 lines) + vanilla-JS frontend embedded 
 ## Repo conventions
 
 - Commits follow Conventional Commits: `feat`/`fix`/`chore`/`build`/`refactor`, optional scope — `feat(i18n):`, `fix(release):`, `refactor(frontend):`.
+- Trailer convention: Claude-assisted commits carry `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` (plus a human co-author trailer when someone else's work is being landed); hand-made commits carry none. The mixed history is deliberate attribution, not drift — don't add or strip trailers retroactively.
 - Contributions from forks must be rebased onto current `main` or cherry-picked — never merged with the GitHub merge button. Older forks carry a divergent history.
 - Key files: `main.go` (server, all handlers) · `public/index.html` (markup + inline handlers) · `public/js/script.js` (all frontend logic + i18n) · `public/css/{tokens,base,components}.css` (load order matters) · `main_test.go` + `proxytest_test.go` (Go tests) · `.github/workflows/release.yml` (only CI).
 - Four READMEs (`README.md`, `_FA`, `_RU`, `_ZH`) are intended to be kept in sync — not verified, and they already differ in length (`README_FA.md` is 77 lines against 85 for the other three). The in-app Help button opens the one matching the current UI language.
