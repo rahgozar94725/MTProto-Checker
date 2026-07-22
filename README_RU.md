@@ -38,7 +38,7 @@
 
 ### Вариант 2 — Сборка из исходников
 
-Требуется **Go 1.18+**. [Скачать Go](https://go.dev/dl/).
+Требуется **Go 1.26.3+** (соответствует директиве `go` в `go.mod`). [Скачать Go](https://go.dev/dl/).
 
 ```bash
 git clone https://github.com/rahgozar94725/MTProto-Checker.git

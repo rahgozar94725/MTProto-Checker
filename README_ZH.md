@@ -38,7 +38,7 @@
 
 ### 方式 2 — 从源码构建
 
-需要 **Go 1.18+**。[下载 Go](https://go.dev/dl/)。
+需要 **Go 1.26.3+**（与 `go.mod` 中的 `go` 指令一致）。[下载 Go](https://go.dev/dl/)。
 
 ```bash
 git clone https://github.com/rahgozar94725/MTProto-Checker.git

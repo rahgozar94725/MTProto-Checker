@@ -35,7 +35,7 @@
 
 ### گزینه ۲ — بیلد از سورس
 
-نیازمند **Go 1.18+**. [دانلود Go](https://go.dev/dl/).
+نیازمند **Go 1.26.3+** (مطابق با دستور `go` در فایل `go.mod`). [دانلود Go](https://go.dev/dl/).
 
 ```bash
 git clone https://github.com/rahgozar94725/MTProto-Checker.git

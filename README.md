@@ -37,7 +37,7 @@ Run the binary. Browser opens automatically at `http://localhost:3000`.
 
 ### Option 2 — Build from Source
 
-Requires **Go 1.18+**. [Download Go](https://go.dev/dl/).
+Requires **Go 1.26.3+** (matches the `go` directive in `go.mod`). [Download Go](https://go.dev/dl/).
 
 ```bash
 git clone https://github.com/rahgozar94725/MTProto-Checker.git
