@@ -57,6 +57,21 @@ go build -o mtproto-checker .
 4.  **Wait:** The tool will filter invalid formats first, then test connections in batches.
 5.  **Copy Results:** Valid proxies will appear in the right panel. Click **"Copy"** to save them to your clipboard.
 
+## 🔌 HTTP API
+
+The UI uses `POST /check-stream` (Server-Sent Events). For scripts, `POST /check` is the supported endpoint — one proxy per request:
+
+```bash
+curl -s http://127.0.0.1:3000/check \
+  -H 'Content-Type: application/json' \
+  -d '{"server":"1.2.3.4","port":443,"secret":"ee...","timeout":10}'
+# {"ok":true,"ping":123}  or  {"ok":false}
+```
+
+`timeout` is in seconds, clamped to 3–30 (default 5). Request bodies are capped at 8 MiB, and batch requests accept at most 10 000 proxies (HTTP `413` beyond either limit).
+
+> `POST /check-batch` is **deprecated**: it still works but answers with a `Deprecation: true` header and will be removed in a future release. Use `/check` for scripting or `/check-stream` for streaming results.
+
 ## ⚙️ How it Works
 
 Many proxies respond to TCP pings but fail to encrypt/decrypt Telegram packets (Fake Proxies).

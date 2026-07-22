@@ -30,8 +30,8 @@ No linter, no formatter config, no test CI. Only CI is `.github/workflows/releas
 Single-process Go server (`main.go`, ~600 lines) + vanilla-JS frontend embedded into the binary. No build step for the frontend, no framework, no TypeScript.
 
 **Backend — three endpoints, all wrapped in `recoverMiddleware` (panic → 500 JSON):**
-- `POST /check` — one proxy, returns `{ok, ping?}`
-- `POST /check-batch` — JSON array in, array out. Two strict phases with a barrier between them: all TCP pre-checks finish (`tcpWg.Wait()`), *then* MTProto checks run on survivors.
+- `POST /check` — one proxy, returns `{ok, ping?}`. The supported scripting endpoint, documented in the READMEs' HTTP API section.
+- `POST /check-batch` — **deprecated, removal planned for a future release**: answers with `Deprecation: true` + `Link` headers and logs a warning per hit. JSON array in, array out. Two strict phases with a barrier between them: all TCP pre-checks finish (`tcpWg.Wait()`), *then* MTProto checks run on survivors.
 - `POST /check-stream` — SSE, the only endpoint the UI actually calls. Per-proxy goroutine does TCP check then MTProto check inline (no barrier), emitting `event: progress` per result and `event: done` at the end. Writes are serialized by `mu` because `http.ResponseWriter` is not concurrency-safe.
 
 **Request limits:** every handler caps the body at `maxBodySize` (8 MiB) via `http.MaxBytesReader`; the two batch endpoints additionally reject more than `maxBatchSize` (10 000) entries. Either violation answers `413` with `{"error": …}` — shared logic in `readCheckRequests`, which `/check-stream` runs *before* committing to SSE so a rejected request gets plain JSON, not an empty event stream. Note the UI posts the whole pasted list in one request, so a pasted list over 10 000 entries now fails with the generic error toast.
@@ -74,7 +74,6 @@ Each check gets its own `session.StorageMemory` via `newCheckOptions` — a sess
 
 The READMEs describe intent, and parts have drifted from the code. Verify against source before trusting them. Confirmed by reading the code:
 
-- **`/check` and `/check-batch` are unused by the shipped UI.** The only `fetch()` in the frontend targets `/check-stream`.
 - **No auth, no CORS policy, no origin check.** The server binds `127.0.0.1:3000` by default (`resolveAddr`); setting `HOST=0.0.0.0` (or a specific address) is the explicit opt-in to wider exposure, and anyone routable can then drive the checker. `PORT` parsing is deliberately lenient (Sscanf error ignored) — preserved behavior, not endorsed design.
 - **The production link parser has zero test coverage.** `main_test.go` defines and tests its own local `parseProxyLink` helper; the parser that actually runs is `parseLink` in `public/js/script.js`, and there is no JS test harness in the repo.
 - **Tests depend on a proxy list that is not in the repo.** `main_test.go` and `proxytest_test.go` read `testdata/proxies.txt` and `t.Skip` when it is absent, so `go test ./...` is largely a no-op on a fresh clone.

@@ -337,6 +337,12 @@ func main() {
 			return
 		}
 
+		// Deprecated: removal planned for a future release. Scripts should
+		// use /check; streaming consumers /check-stream.
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", `</check>; rel="alternate", </check-stream>; rel="successor-version"`)
+		log.Printf("DEPRECATED /check-batch hit from %s — use /check for scripting or /check-stream for streaming; removal planned in a future release", r.RemoteAddr)
+
 		reqs, status, msg := readCheckRequests(w, r)
 		if status != 0 {
 			jsonResponse(w, status, map[string]string{"error": msg})

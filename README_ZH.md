@@ -58,6 +58,21 @@ go build -o mtproto-checker .
 4.  **等待:** 工具将先过滤无效格式，然后批量测试连接。
 5.  **复制结果:** 可用代理将显示在右侧面板中。点击 **"复制"** 保存到剪贴板。
 
+## 🔌 HTTP API
+
+界面使用 `POST /check-stream`（Server-Sent Events）。脚本请使用受支持的端点 `POST /check`，每个请求一个代理：
+
+```bash
+curl -s http://127.0.0.1:3000/check \
+  -H 'Content-Type: application/json' \
+  -d '{"server":"1.2.3.4","port":443,"secret":"ee...","timeout":10}'
+# {"ok":true,"ping":123}  或  {"ok":false}
+```
+
+`timeout` 单位为秒，限制在 3–30 之间（默认 5）。请求体上限为 8 MiB，批量请求最多接受 10 000 个代理（超过任一限制返回 HTTP `413`）。
+
+> `POST /check-batch` 已**弃用**：目前仍可用，但响应会带有 `Deprecation: true` 头，并将在未来版本中移除。脚本请使用 `/check`，流式结果请使用 `/check-stream`。
+
 ## ⚙️ 工作原理
 
 许多代理能响应 TCP 连接，但无法加密/解密 Telegram 数据包（虚假代理）。
