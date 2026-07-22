@@ -23,6 +23,12 @@
     outline-offset: 2px;
 }
 
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+    }
+}
+
 body {
     font-family: var(--font-fa);
     background-color: var(--bg);

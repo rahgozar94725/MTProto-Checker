@@ -166,25 +166,26 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
 /* ===== Progress ===== */
 .progress-box {
     background: var(--input);
-    height: 8px;
-    border-radius: 4px;
+    height: 10px;
+    border-radius: 999px;
     overflow: hidden;
 }
 
 .progress-bar {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, var(--accent), #60a5fa);
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
     transition: width 0.3s ease;
 }
 
 .status-text {
     text-align: center;
-    font-size: 13px;
-    color: var(--muted);
-    margin-top: 5px;
+    font-size: var(--text-base);
+    color: var(--text-secondary);
+    margin-top: var(--space-2);
     direction: ltr;
     font-family: var(--font-en);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ===== Grid ===== */
@@ -248,6 +249,11 @@ button, .btn-file {
 
 button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
 
+button:active:not(:disabled),
+.btn-file:active {
+    transform: translateY(1px);
+}
+
 [data-theme="light"] button, 
 [data-theme="light"] .btn-file {
     border-color: rgba(0,0,0,0.06);
@@ -273,9 +279,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
     flex: 2;
 }
 
+/* Colored glow belongs to hover — at rest the buttons stay quiet
+   so live scan feedback outranks idle chrome. */
 .btn-start {
     background: linear-gradient(135deg, rgba(59,130,246,0.9), rgba(99,102,241,0.9));
-    box-shadow: 0 4px 16px rgba(59,130,246,0.3), inset 0 1px 0 rgba(255,255,255,0.15);
 }
 .btn-start:hover:not(:disabled) {
     background: linear-gradient(135deg, rgba(37,99,235,0.95), rgba(79,70,229,0.95));
@@ -283,12 +290,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
 }
 [data-theme="light"] .btn-start {
     background: linear-gradient(135deg, rgba(37,99,235,0.92), rgba(79,70,229,0.92));
-    box-shadow: 0 4px 12px rgba(37,99,235,0.2), inset 0 1px 0 rgba(255,255,255,0.3);
 }
 
 .btn-copy, .btn-export {
     background: linear-gradient(135deg, rgba(16,185,129,0.88), rgba(5,150,105,0.88));
-    box-shadow: 0 4px 16px rgba(16,185,129,0.25), inset 0 1px 0 rgba(255,255,255,0.12);
 }
 .btn-copy:hover, .btn-export:hover {
     background: linear-gradient(135deg, rgba(5,150,105,0.94), rgba(4,120,87,0.94));
@@ -297,12 +302,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
 [data-theme="light"] .btn-copy,
 [data-theme="light"] .btn-export {
     background: linear-gradient(135deg, rgba(5,150,105,0.92), rgba(4,120,87,0.92));
-    box-shadow: 0 4px 12px rgba(5,150,105,0.2), inset 0 1px 0 rgba(255,255,255,0.3);
 }
 
 .btn-pause {
     background: linear-gradient(135deg, rgba(245,158,11,0.88), rgba(217,119,6,0.88));
-    box-shadow: 0 4px 16px rgba(245,158,11,0.25), inset 0 1px 0 rgba(255,255,255,0.12);
 }
 .btn-pause:hover {
     background: linear-gradient(135deg, rgba(217,119,6,0.94), rgba(180,83,9,0.94));
@@ -310,14 +313,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
 }
 .btn-pause.resume {
     background: linear-gradient(135deg, rgba(16,185,129,0.88), rgba(5,150,105,0.88));
-    box-shadow: 0 4px 16px rgba(16,185,129,0.25), inset 0 1px 0 rgba(255,255,255,0.12);
 }
 .btn-pause.resume:hover {
     background: linear-gradient(135deg, rgba(5,150,105,0.94), rgba(4,120,87,0.94));
 }
 [data-theme="light"] .btn-pause {
     background: linear-gradient(135deg, rgba(217,119,6,0.92), rgba(180,83,9,0.92));
-    box-shadow: 0 4px 12px rgba(217,119,6,0.2), inset 0 1px 0 rgba(255,255,255,0.3);
 }
 
 .btn-file {
@@ -335,7 +336,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
 
 .btn-stop {
     background: linear-gradient(135deg, rgba(239,68,68,0.9), rgba(220,38,38,0.9));
-    box-shadow: 0 4px 16px rgba(239,68,68,0.3), inset 0 1px 0 rgba(255,255,255,0.12);
 }
 .btn-stop:hover {
     background: linear-gradient(135deg, rgba(220,38,38,0.95), rgba(185,28,28,0.95));
@@ -343,7 +343,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
 }
 [data-theme="light"] .btn-stop {
     background: linear-gradient(135deg, rgba(220,38,38,0.92), rgba(185,28,28,0.92));
-    box-shadow: 0 4px 12px rgba(220,38,38,0.2), inset 0 1px 0 rgba(255,255,255,0.3);
 }
 
 /* ===== Debug Console ===== */
@@ -351,20 +350,21 @@ button:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
     background: var(--console-bg);
     color: var(--console-text);
     font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 10px;
-    height: 80px;
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    padding: var(--space-3);
+    height: 120px;
     overflow-y: auto;
     border-radius: var(--radius-md);
     border: 1px solid var(--console-border);
     direction: ltr;
     text-align: left;
-    margin-top: 10px;
     scrollbar-width: thin;
     scrollbar-color: var(--accent) var(--console-border);
 }
 
 .error-log { color: var(--error); }
+.ok-log { color: var(--success); }
 
 /* ===== Toast ===== */
 .toast {

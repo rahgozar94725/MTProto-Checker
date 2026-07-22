@@ -186,11 +186,13 @@ updateStartBtn();
 
 const MAX_LOG_LINES = 200;
 
-function log(msg, isError = false) {
+// kind: true|'error' → red, 'ok' → green, anything else → plain
+function log(msg, kind = null) {
     const c = document.getElementById('console');
     const line = document.createElement('div');
     line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    if (isError) line.className = 'error-log';
+    if (kind === true || kind === 'error') line.className = 'error-log';
+    else if (kind === 'ok') line.className = 'ok-log';
     c.appendChild(line);
     while (c.children.length > MAX_LOG_LINES) {
         c.removeChild(c.firstChild);
@@ -389,7 +391,7 @@ async function runCheckStream(proxies, linkMap) {
                     if (data.ok) {
                         const orig = linkMap.get(key) || `tg://proxy?server=${data.server}&port=${data.port}&secret=${data.secret}`;
                         workingProxies.push({ link: orig, ping: data.ping });
-                        log(`SUCCESS: ${data.server} (${data.ping}ms)`);
+                        log(`SUCCESS: ${data.server} (${data.ping}ms)`, 'ok');
                         updateOutput();
                     }
                 }
