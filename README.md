@@ -31,7 +31,7 @@ Download the pre-built binary for your platform from [Releases](../../releases).
 | macOS (Intel) | `mtproto-checker-darwin-amd64` |
 | macOS (Apple Silicon) | `mtproto-checker-darwin-arm64` |
 
-Run the binary. Browser opens automatically at `http://localhost:3000`.
+Run the binary. Once the server is listening, your browser opens automatically at the bound address (default `http://127.0.0.1:3000`). Set `NO_BROWSER=1` to disable the auto-open; it is also skipped automatically when `HOST` is set to a non-loopback address (e.g. a headless server with `HOST=0.0.0.0`). If the launch fails, the server keeps running — open the printed address manually.
 
 > The server listens on `127.0.0.1` only. Set the `PORT` environment variable to change the port, and `HOST=0.0.0.0` to expose it to the network — there is no authentication, so opt in deliberately.
 

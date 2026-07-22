@@ -27,7 +27,7 @@ No linter, no formatter config, no test CI. Only CI is `.github/workflows/releas
 
 ## Architecture
 
-Single-process Go server (`main.go`, ~515 lines) + vanilla-JS frontend embedded into the binary. No build step for the frontend, no framework, no TypeScript.
+Single-process Go server (`main.go`, ~600 lines) + vanilla-JS frontend embedded into the binary. No build step for the frontend, no framework, no TypeScript.
 
 **Backend — three endpoints, all wrapped in `recoverMiddleware` (panic → 500 JSON):**
 - `POST /check` — one proxy, returns `{ok, ping?}`
@@ -35,6 +35,8 @@ Single-process Go server (`main.go`, ~515 lines) + vanilla-JS frontend embedded 
 - `POST /check-stream` — SSE, the only endpoint the UI actually calls. Per-proxy goroutine does TCP check then MTProto check inline (no barrier), emitting `event: progress` per result and `event: done` at the end. Writes are serialized by `mu` because `http.ResponseWriter` is not concurrency-safe.
 
 `public/` is baked in with `//go:embed public` + `fs.Sub` and served by `http.FileServer` at `/`. Nothing is read from disk at runtime — editing `public/` requires a rebuild (or `go run .`) to take effect.
+
+**Startup** logs the version (`-ldflags -X main.version=<tag>` in releases, `"dev"` otherwise), binds explicitly with `net.Listen` (bind failure dies before any browser launch), then opens the local browser at the bound address — only when the bound host is loopback (`shouldOpenBrowser`); `NO_BROWSER` set to any non-empty value suppresses it, and a non-loopback `HOST` suppresses it automatically. The launcher (`browserCommand`: `rundll32`/`open`/`xdg-open`) is fire-and-forget; a failed launch logs one line and never affects the server.
 
 **Proxy verification** (`checkProxy`) is a real MTProto handshake, not a TCP ping: `dcs.MTProxy(addr, secret)` resolver → `telegram.NewClient` with public test creds (`testAppID = 6`, `testAppHash = "eb06d4…"`, hardcoded in `main.go`, intentionally public — no login required) → `help.getNearestDC`. Round-trip time of that call is the reported ping. It carries its own `recover()` in addition to the middleware's; the reason is not recorded anywhere in the repo.
 
@@ -74,6 +76,6 @@ The READMEs describe intent, and parts have drifted from the code. Verify agains
 - **No auth, no CORS policy, no origin check.** The server binds `127.0.0.1:3000` by default (`resolveAddr`); setting `HOST=0.0.0.0` (or a specific address) is the explicit opt-in to wider exposure, and anyone routable can then drive the checker. `PORT` parsing is deliberately lenient (Sscanf error ignored) — preserved behavior, not endorsed design.
 - **The production link parser has zero test coverage.** `main_test.go` defines and tests its own local `parseProxyLink` helper; the parser that actually runs is `parseLink` in `public/js/script.js`, and there is no JS test harness in the repo.
 - **Tests depend on a proxy list that is not in the repo.** `main_test.go` and `proxytest_test.go` read `testdata/proxies.txt` and `t.Skip` when it is absent, so `go test ./...` is largely a no-op on a fresh clone.
-- **No HTTP handler tests.** Six test functions exist and none uses `httptest`; `/check`, `/check-batch`, `/check-stream` and `recoverMiddleware` have zero coverage. `checkProxy` is exercised only by a live-network test that skips when the local proxy list is absent.
+- **No HTTP handler tests.** No test uses `httptest`; `/check`, `/check-batch`, `/check-stream` and `recoverMiddleware` have zero coverage. `checkProxy` is exercised only by a live-network test that skips when the local proxy list is absent.
 
 Every item above is documentation of current state. Fixes go through brainstorming → plan first, not opportunistic edits.

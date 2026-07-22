@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -126,6 +127,46 @@ func TestResolveAddr(t *testing.T) {
 	for _, tt := range tests {
 		if got := resolveAddr(tt.host, tt.port); got != tt.want {
 			t.Errorf("resolveAddr(%q, %q) = %q, want %q", tt.host, tt.port, got, tt.want)
+		}
+	}
+}
+
+func TestShouldOpenBrowser(t *testing.T) {
+	tests := []struct {
+		addr, env string
+		want      bool
+	}{
+		{"127.0.0.1:3000", "", true},
+		{"[::1]:3000", "", true},
+		{"localhost:3000", "", true},
+		{"127.0.0.1:3000", "1", false},  // NO_BROWSER set
+		{"0.0.0.0:3000", "", false},     // non-loopback bind suppresses automatically
+		{"192.168.1.5:8080", "", false}, // ditto for a specific LAN address
+		{"[::]:3000", "", false},
+		{"not-an-addr", "", false},
+	}
+	for _, tt := range tests {
+		if got := shouldOpenBrowser(tt.addr, tt.env); got != tt.want {
+			t.Errorf("shouldOpenBrowser(%q, %q) = %v, want %v", tt.addr, tt.env, got, tt.want)
+		}
+	}
+}
+
+func TestBrowserCommand(t *testing.T) {
+	const url = "http://127.0.0.1:3000"
+	tests := []struct {
+		goos, name string
+		args       []string
+	}{
+		{"windows", "rundll32", []string{"url.dll,FileProtocolHandler", url}},
+		{"darwin", "open", []string{url}},
+		{"linux", "xdg-open", []string{url}},
+		{"freebsd", "xdg-open", []string{url}}, // anything else falls back to xdg-open
+	}
+	for _, tt := range tests {
+		name, args := browserCommand(tt.goos, url)
+		if name != tt.name || !slices.Equal(args, tt.args) {
+			t.Errorf("browserCommand(%q) = %q %v, want %q %v", tt.goos, name, args, tt.name, tt.args)
 		}
 	}
 }

@@ -12,7 +12,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -201,6 +203,49 @@ func resolveAddr(hostEnv, portEnv string) string {
 		fmt.Sscanf(portEnv, "%d", &port)
 	}
 	return net.JoinHostPort(host, fmt.Sprintf("%d", port))
+}
+
+// shouldOpenBrowser reports whether startup should try to launch a browser:
+// only when NO_BROWSER is unset (any non-empty value suppresses) and the bound
+// host is loopback. Binding a non-loopback address — HOST=0.0.0.0 on a
+// headless server — suppresses the launch automatically.
+func shouldOpenBrowser(addr, noBrowserEnv string) bool {
+	if noBrowserEnv != "" {
+		return false
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// browserCommand returns the platform launcher invocation for url.
+func browserCommand(goos, url string) (string, []string) {
+	switch goos {
+	case "windows":
+		return "rundll32", []string{"url.dll,FileProtocolHandler", url}
+	case "darwin":
+		return "open", []string{url}
+	default:
+		return "xdg-open", []string{url}
+	}
+}
+
+// openBrowser fires the platform launcher without ever blocking the server: a
+// missing launcher (minimal Linux without xdg-open) logs one line and moves on.
+func openBrowser(url string) {
+	name, args := browserCommand(runtime.GOOS, url)
+	cmd := exec.Command(name, args...)
+	if err := cmd.Start(); err != nil {
+		log.Printf("Could not open browser: %v — open %s manually", err, url)
+		return
+	}
+	go func() { _ = cmd.Wait() }()
 }
 
 func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
@@ -524,11 +569,22 @@ func main() {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
 
+	// Listen explicitly so the browser only opens once the address is
+	// actually bound; a bind failure dies here, before any launch attempt.
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Listen error: %v", err)
+	}
+
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
+
+	if shouldOpenBrowser(addr, os.Getenv("NO_BROWSER")) {
+		openBrowser("http://" + addr)
+	}
 
 	<-done
 	log.Println("Shutting down...")
