@@ -1,4 +1,4 @@
-# 🛡️ تست دقیق پروکسی MTProto
+# 🛡️ MTProto Checker
 
 [English](README.md) | [На русском](README_RU.md) | [中文](README_ZH.md) | [فارسی](README_FA.md)
 

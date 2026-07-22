@@ -1,6 +1,6 @@
 const translations = {
     fa: {
-        title: "MTProto Pro Checker",
+        title: "MTProto Checker",
         subtitle: "تست اتصال",
         ready: "آماده برای شروع...",
         inputLabel: "📥 لیست ورودی (کثیف و نامرتب)",
@@ -29,7 +29,7 @@ const translations = {
         timeoutLabel: "تایم‌اوت (ثانیه)"
     },
     en: {
-        title: "MTProto Pro Checker",
+        title: "MTProto Checker",
         subtitle: "Real connection test",
         ready: "Ready to start...",
         inputLabel: "📥 Input List (Mixed/Dirty)",
@@ -58,7 +58,7 @@ const translations = {
         timeoutLabel: "Timeout (sec)"
     },
     ru: {
-        title: "MTProto Pro Checker",
+        title: "MTProto Checker",
         subtitle: "Проверка соединения",
         ready: "Готов к запуску...",
         inputLabel: "📥 Список прокси (грязный/смешанный)",
@@ -87,7 +87,7 @@ const translations = {
         timeoutLabel: "Тайм-аут (сек)"
     },
     zh: {
-        title: "MTProto Pro Checker",
+        title: "MTProto Checker",
         subtitle: "连接测试",
         ready: "准备开始...",
         inputLabel: "📥 输入列表（混合/脏数据）",
