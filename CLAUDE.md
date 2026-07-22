@@ -21,7 +21,7 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-X main.version=v0.0.0-
 
 A host build (`go1.26.4 windows/amd64`) produces a 21,616,640-byte (~20.6 MiB) binary with `public/` baked in.
 
-**Formatting:** the repository stores Go sources with LF (`git show HEAD:main.go` contains zero CR bytes). On a Windows checkout with `core.autocrlf=true` the working copy is CRLF, and `gofmt -l .` then flags all three Go files — `main.go`, `main_test.go`, `proxytest_test.go` — on line endings alone. On an LF checkout only `main.go` remains flagged, for real drift (import `github.com/gotd/td/session` sorted after `dcs`; `const` block alignment). There is no `.gitattributes`; adding one with `*.go text eol=lf` would make `gofmt -l` meaningful on every platform — a future task, not done here.
+**Formatting:** `.gitattributes` pins `*.go` (and all text files) to LF in the repository *and* the working copy, so `gofmt -l .` is meaningful on every platform and is expected to be clean. Caveat: a checkout that predates `.gitattributes` may still hold stale CRLF working copies (`git ls-files --eol` shows `w/crlf`), which makes `gofmt -l` flag every Go file on line endings alone — fix with `rm <files> && git checkout -- <files>`, not by re-formatting.
 
 No linter, no formatter config, no test CI. Only CI is `.github/workflows/release.yml`, triggered by `push` of a `v*` tag: cross-compiles 5 platforms (windows/linux/darwin × amd64/arm64, `CGO_ENABLED=0`), injects `-X main.version=<tag>`, uploads to GitHub Releases with a changelog generated from `git log <prev-tag>..<tag>`.
 
@@ -79,6 +79,5 @@ The READMEs describe intent, and parts have drifted from the code. Verify agains
 - **Tests depend on a proxy list that is not in the repo.** `main_test.go` and `proxytest_test.go` read `testdata/proxies.txt` and `t.Skip` when it is absent, so `go test ./...` is largely a no-op on a fresh clone.
 - **Version declarations disagree:** `go.mod` says `go 1.26.3`; the README and the release workflow say Go 1.18+.
 - **No HTTP handler tests.** Six test functions exist and none uses `httptest`; `/check`, `/check-batch`, `/check-stream` and `recoverMiddleware` have zero coverage. `checkProxy` is exercised only by a live-network test that skips when the local proxy list is absent.
-- **`main.go` is not gofmt-clean** (import order, const block alignment). This is real drift in the committed LF source, separate from the working-copy CRLF that makes `gofmt -l` flag all three files on an `autocrlf=true` checkout.
 
 Every item above is documentation of current state. Fixes go through brainstorming → plan first, not opportunistic edits.

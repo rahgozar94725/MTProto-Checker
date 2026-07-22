@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
+	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/dcs"
-	"github.com/gotd/td/session"
 )
 
 //go:embed public
@@ -31,18 +31,18 @@ var publicFS embed.FS
 var version = "dev"
 
 const (
-	defaultHost     = "127.0.0.1"
-	defaultPort     = 3000
-	testAppID       = 6
-	testAppHash     = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
-	maxBodySize     = 50 * 1024 * 1024
-	maxConcurrency  = 50
-	defaultTimeout  = 5
-	minTimeout      = 3
-	maxTimeout      = 30
-	tcpTimeout      = 1500 * time.Millisecond
+	defaultHost        = "127.0.0.1"
+	defaultPort        = 3000
+	testAppID          = 6
+	testAppHash        = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
+	maxBodySize        = 50 * 1024 * 1024
+	maxConcurrency     = 50
+	defaultTimeout     = 5
+	minTimeout         = 3
+	maxTimeout         = 30
+	tcpTimeout         = 1500 * time.Millisecond
 	minTimeoutDuration = time.Duration(minTimeout) * time.Second
-	shutdownTimeout = 5 * time.Second
+	shutdownTimeout    = 5 * time.Second
 )
 
 type dnsCacheEntry struct {
