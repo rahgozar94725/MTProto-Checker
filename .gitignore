@@ -11,3 +11,11 @@ filter.sh
 
 # Agent-local notes, not shared with the team
 .claude.local.md
+
+# Agent process artifacts, kept on disk, never published.
+# Durable decisions go in CLAUDE.md instead.
+docs/superpowers/
+.agent-docs/
+
+# Archives are built outside the repository; this is the backstop.
+*.zip
