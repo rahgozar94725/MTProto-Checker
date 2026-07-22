@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/gotd/td/session"
 )
 
 func TestTelegramCheckWorkingProxies(t *testing.T) {
@@ -67,9 +65,6 @@ func TestTelegramCheckWorkingProxies(t *testing.T) {
 	if len(reachable) == 0 {
 		t.Skip("no reachable proxies to test Telegram check")
 	}
-
-	// Reset shared session to start fresh
-	sharedSession = &session.StorageMemory{}
 
 	ctx := context.Background()
 	for i, p := range reachable {

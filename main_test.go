@@ -100,6 +100,17 @@ func TestTcpCheckLocalhost(t *testing.T) {
 	}
 }
 
+func TestNewCheckOptionsFreshSession(t *testing.T) {
+	a := newCheckOptions(nil)
+	b := newCheckOptions(nil)
+	if a.SessionStorage == nil || b.SessionStorage == nil {
+		t.Fatal("newCheckOptions returned nil SessionStorage")
+	}
+	if a.SessionStorage == b.SessionStorage {
+		t.Error("SessionStorage shared between checks; each check must get a fresh session")
+	}
+}
+
 func TestDecodeSecretErrors(t *testing.T) {
 	_, err := decodeSecret("!!!invalid!!!")
 	if err == nil {

@@ -44,8 +44,6 @@ const (
 	shutdownTimeout = 5 * time.Second
 )
 
-var sharedSession = &session.StorageMemory{}
-
 type dnsCacheEntry struct {
 	ips  []net.IP
 	next time.Time
@@ -118,6 +116,20 @@ func decodeSecret(s string) ([]byte, error) {
 	return nil, errors.Errorf("unable to decode secret %q as hex or base64", s)
 }
 
+// newCheckOptions returns client options with a fresh session storage per
+// check: a session holds the negotiated auth key and DC address, so sharing
+// one across concurrent checks lets state from one proxy leak into another.
+func newCheckOptions(resolver dcs.Resolver) telegram.Options {
+	return telegram.Options{
+		Resolver:        resolver,
+		SessionStorage:  &session.StorageMemory{},
+		DialTimeout:     minTimeoutDuration,
+		ExchangeTimeout: 2 * time.Second,
+		NoUpdates:       true,
+		Device:          telegram.DeviceTDesktopWindows(),
+	}
+}
+
 func tcpCheck(server string, port int) error {
 	_, err := cachedLookupHost(server)
 	if err != nil {
@@ -152,14 +164,7 @@ func checkProxy(ctx context.Context, server string, port int, secret string, tim
 		return 0, errors.Wrap(err, "create MTProxy resolver")
 	}
 
-	client := telegram.NewClient(testAppID, testAppHash, telegram.Options{
-		Resolver:        resolver,
-		SessionStorage:  sharedSession,
-		DialTimeout:     minTimeoutDuration,
-		ExchangeTimeout: 2 * time.Second,
-		NoUpdates:       true,
-		Device:          telegram.DeviceTDesktopWindows(),
-	})
+	client := telegram.NewClient(testAppID, testAppHash, newCheckOptions(resolver))
 
 	checkCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()

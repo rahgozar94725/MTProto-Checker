@@ -40,8 +40,9 @@ Single-process Go server (`main.go`, ~515 lines) + vanilla-JS frontend embedded 
 
 `decodeSecret` tries the raw input and then a junk-right-trimmed copy (the trim set overlaps the base64 alphabets, so raw must come first); per candidate it tries hex first (both candidates), then base64 RawURL → URL → RawStd → Std.
 
+Each check gets its own `session.StorageMemory` via `newCheckOptions` — a session holds the negotiated auth key and DC address, so sharing one across concurrent checks leaks state between proxies (a package-level `sharedSession` used to do exactly that).
+
 **Shared mutable state to be careful with:**
-- `sharedSession` — one package-level `session.StorageMemory` shared across concurrent checks of different proxies and different DCs. Why it is shared is not documented, and the correctness impact of that sharing has not been verified. Tests wanting isolation reassign it (`sharedSession = &session.StorageMemory{}`).
 - `dnsCache` — `map[string]*dnsCacheEntry` behind `dnsCacheMu`, 5-min TTL, consulted by `tcpCheck` before dialing.
 
 **Timeout layering** (four levels, don't collapse them): UI-selected `timeout` clamped to 3–30s (`defaultTimeout = 5`) bounds the gotd context; `/check-stream` wraps that in a hard `t+10s` context so a stuck proxy can never wedge a goroutine; `tcpTimeout` is a fixed 1.5s dial; the client also arms its own `(timeout+30)*1000 + 120000` ms abort on the whole stream. Server `WriteTimeout` is 300s to keep long SSE streams alive; shutdown is `SIGINT`/`SIGTERM` → `srv.Shutdown` with a 5s context.
