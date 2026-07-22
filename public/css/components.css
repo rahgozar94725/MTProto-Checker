@@ -223,6 +223,19 @@ textarea {
 
 textarea:focus { border-color: var(--accent); }
 
+/* Proxy links are LTR data — a RTL base direction bidi-mangles their
+   wrapping (the console already forces ltr for the same reason).
+   While only the Persian placeholder is showing, stay RTL. */
+textarea {
+    direction: ltr;
+    text-align: left;
+}
+
+html[dir="rtl"] textarea:placeholder-shown {
+    direction: rtl;
+    text-align: right;
+}
+
 /* ===== Buttons ===== */
 button, .btn-file {
     display: inline-flex;
