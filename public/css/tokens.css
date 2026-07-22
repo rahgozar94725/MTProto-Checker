@@ -2,46 +2,72 @@
     --bg: #0f172a;
     --card: #1e293b;
     --input: #334155;
+    --input-hover: #3f4a5e;
     --text: #f8fafc;
     --text-secondary: #cbd5e1;
     --muted: #94a3b8;
     --accent: #3b82f6;
     --accent-hover: #2563eb;
+    --accent-2: #6366f1;
     --success: #10b981;
     --success-hover: #059669;
     --error: #ef4444;
     --warning: #f59e0b;
     --warning-hover: #d97706;
     --border: #475569;
-    --console-bg: #000;
-    --console-text: #00ff00;
-    --console-border: #333;
+    --console-bg: #0b1120;
+    --console-text: #94a3b8;
+    --console-border: #334155;
+    --toast-bg: #334155;
 }
 
 [data-theme="light"] {
     --bg: #f8fafc;
     --card: #ffffff;
     --input: #f1f5f9;
+    --input-hover: #e2e8f0;
     --text: #0f172a;
     --text-secondary: #334155;
     --muted: #64748b;
     --accent: #2563eb;
     --accent-hover: #1d4ed8;
+    --accent-2: #4f46e5;
     --success: #059669;
     --success-hover: #047857;
     --error: #dc2626;
     --warning: #d97706;
     --warning-hover: #b45309;
     --border: #cbd5e1;
-    --console-bg: #f8fafc;
-    --console-text: #0f172a;
+    --console-bg: #f1f5f9;
+    --console-text: #475569;
     --console-border: #cbd5e1;
+    --toast-bg: #1e293b;
 }
 
 :root {
     --font-fa: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
     --font-en: 'Inter', system-ui, -apple-system, sans-serif;
     --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+
+    /* Type scale: mono data / UI meta / body / actions / page title */
+    --text-xs: 12px;
+    --text-sm: 13px;
+    --text-base: 14px;
+    --text-md: 15px;
+    --text-xl: 22px;
+    --weight-medium: 500;
+    --weight-semibold: 600;
+    --weight-bold: 700;
+
+    /* Spacing scale — every gap/margin/padding draws from here */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+
     --radius-sm: 6px;
     --radius-md: 8px;
     --radius-lg: 10px;
