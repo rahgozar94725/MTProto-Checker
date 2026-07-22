@@ -38,7 +38,7 @@ Single-process Go server (`main.go`, ~515 lines) + vanilla-JS frontend embedded 
 
 **Proxy verification** (`checkProxy`) is a real MTProto handshake, not a TCP ping: `dcs.MTProxy(addr, secret)` resolver → `telegram.NewClient` with public test creds (`testAppID = 6`, `testAppHash = "eb06d4…"`, hardcoded in `main.go`, intentionally public — no login required) → `help.getNearestDC`. Round-trip time of that call is the reported ping. It carries its own `recover()` in addition to the middleware's; the reason is not recorded anywhere in the repo.
 
-`decodeSecret` right-trims a set of punctuation/whitespace junk, then tries hex → base64 RawURL → base64 URL in order.
+`decodeSecret` tries the raw input and then a junk-right-trimmed copy (the trim set overlaps the base64 alphabets, so raw must come first); per candidate it tries hex first (both candidates), then base64 RawURL → URL → RawStd → Std.
 
 **Shared mutable state to be careful with:**
 - `sharedSession` — one package-level `session.StorageMemory` shared across concurrent checks of different proxies and different DCs. Why it is shared is not documented, and the correctness impact of that sharing has not been verified. Tests wanting isolation reassign it (`sharedSession = &session.StorageMemory{}`).

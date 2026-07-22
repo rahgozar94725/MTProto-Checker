@@ -95,17 +95,27 @@ type CheckResponse struct {
 }
 
 func decodeSecret(s string) ([]byte, error) {
-	s = strings.TrimRight(s, "!@#$%^&*()_+`~[]{}|;:',.<>?/ \t\n\r")
-	if b, err := hex.DecodeString(s); err == nil {
-		return b, nil
+	// The trim set overlaps the base64 alphabets ('+', '/', '_'), so the raw
+	// input must be tried before the trimmed one or a secret ending in those
+	// characters decodes to the wrong bytes. Hex is tried on both forms first
+	// so a hex secret with junk appended can't be misread as base64.
+	candidates := []string{s, strings.TrimRight(s, "!@#$%^&*()_+`~[]{}|;:',.<>?/ \t\n\r")}
+	for _, c := range candidates {
+		if b, err := hex.DecodeString(c); err == nil {
+			return b, nil
+		}
 	}
-	if b, err := base64.RawURLEncoding.DecodeString(s); err == nil {
-		return b, nil
+	for _, c := range candidates {
+		for _, enc := range []*base64.Encoding{
+			base64.RawURLEncoding, base64.URLEncoding,
+			base64.RawStdEncoding, base64.StdEncoding,
+		} {
+			if b, err := enc.DecodeString(c); err == nil {
+				return b, nil
+			}
+		}
 	}
-	if b, err := base64.URLEncoding.DecodeString(s); err == nil {
-		return b, nil
-	}
-	return nil, errors.Errorf("unable to decode secret %q as hex or base64url", s)
+	return nil, errors.Errorf("unable to decode secret %q as hex or base64", s)
 }
 
 func tcpCheck(server string, port int) error {
