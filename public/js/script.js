@@ -551,9 +551,8 @@ function fallbackCopy(text) {
 function showToast(message, isError = false) {
     const toast = document.getElementById("toast");
     toast.innerText = message;
-    toast.style.backgroundColor = isError ? "#ef4444" : "#10b981";
-    toast.className = "toast show";
-    setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+    toast.className = "toast show " + (isError ? "error" : "success");
+    setTimeout(() => { toast.classList.remove("show"); }, 3000);
 }
 
 function beep() {

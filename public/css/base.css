@@ -18,6 +18,11 @@
     box-sizing: border-box;
 }
 
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 body {
     font-family: var(--font-fa);
     background-color: var(--bg);
