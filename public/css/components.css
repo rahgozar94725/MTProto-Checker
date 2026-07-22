@@ -1,17 +1,12 @@
 /* ===== Header Controls ===== */
+/* Normal flow, end-aligned: flex-end flips visually with html[dir],
+   and long Persian/Russian labels can never collide with the title. */
 .header-controls {
-    position: absolute;
-    top: 25px;
-    left: 25px;
-    z-index: 10;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 8px;
-}
-
-html[dir="ltr"] .header-controls {
-    left: auto;
-    right: 25px;
 }
 
 .header-controls .theme-toggle,
