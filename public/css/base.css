@@ -28,7 +28,7 @@ body {
     background-color: var(--bg);
     color: var(--text);
     margin: 0;
-    padding: 20px;
+    padding: var(--space-5);
     display: flex;
     justify-content: center;
     min-height: 100vh;
@@ -45,20 +45,32 @@ html[dir="ltr"] body {
     width: 100%;
     max-width: 1100px;
     background-color: var(--card);
-    padding: 30px;
+    padding: var(--space-8);
     border-radius: var(--radius-xl);
     box-shadow: var(--shadow-card);
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--space-5);
     position: relative;
+    transition: background-color 0.3s;
+}
+
+@media (max-width: 640px) {
+    body { padding: var(--space-3); }
+    .container { padding: var(--space-5); }
 }
 
 h1 {
     text-align: center;
     color: var(--accent);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
     margin: 0;
-    margin-top: 5px;
+}
+
+/* Tighten Latin tracking only — letter-spacing degrades joined Arabic script */
+html[dir="ltr"] h1 {
+    letter-spacing: -0.02em;
 }
 
 h1 a {
@@ -72,13 +84,14 @@ h1 a:hover {
 p.sub {
     text-align: center;
     color: var(--muted);
-    margin: 5px 0 12px 0;
-    font-size: 14px;
+    margin: var(--space-1) 0 var(--space-3) 0;
+    font-size: var(--text-base);
 }
 
 label {
     display: block;
-    margin-bottom: 8px;
-    font-weight: bold;
-    font-size: 14px;
+    margin-bottom: var(--space-2);
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
 }
