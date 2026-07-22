@@ -510,6 +510,7 @@ func main() {
 	mux.Handle("/", http.FileServer(http.FS(embeddedFS)))
 
 	addr := resolveAddr(os.Getenv("HOST"), os.Getenv("PORT"))
+	log.Printf("MTProto Checker %s", version)
 	log.Printf("Server running at http://%s", addr)
 
 	srv := &http.Server{

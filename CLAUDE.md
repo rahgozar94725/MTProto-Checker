@@ -70,7 +70,6 @@ Each check gets its own `session.StorageMemory` via `newCheckOptions` — a sess
 
 The READMEs describe intent, and parts have drifted from the code. Verify against source before trusting them. Confirmed by reading the code:
 
-- **`var version` is never read.** The release workflow injects it via `-ldflags -X main.version=<tag>`, but `main.go:31` is the only occurrence in the source — no flag, no endpoint, no log line surfaces it.
 - **`/check` and `/check-batch` are unused by the shipped UI.** The only `fetch()` in the frontend targets `/check-stream`.
 - **No auth, no CORS policy, no origin check.** The server binds `127.0.0.1:3000` by default (`resolveAddr`); setting `HOST=0.0.0.0` (or a specific address) is the explicit opt-in to wider exposure, and anyone routable can then drive the checker. `PORT` parsing is deliberately lenient (Sscanf error ignored) — preserved behavior, not endorsed design.
 - **The production link parser has zero test coverage.** `main_test.go` defines and tests its own local `parseProxyLink` helper; the parser that actually runs is `parseLink` in `public/js/script.js`, and there is no JS test harness in the repo.
