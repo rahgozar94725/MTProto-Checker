@@ -1,3 +1,10 @@
+/* ===== Icons ===== */
+.icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
 /* ===== Header Controls ===== */
 /* Normal flow, end-aligned: flex-end flips visually with html[dir],
    and long Persian/Russian labels can never collide with the title. */
@@ -48,14 +55,13 @@
 .sound-toggle input { display: none; }
 
 .sound-icon {
-    font-size: 16px;
-    transition: all 0.3s;
-    filter: grayscale(1) brightness(0.5);
+    display: flex;
+    color: var(--muted);
+    transition: color 0.3s;
 }
 
 .sound-toggle input:checked + .sound-icon {
-    filter: none;
-    text-shadow: 0 0 6px var(--accent);
+    color: var(--accent);
 }
 
 .sound-state {
@@ -96,12 +102,17 @@ html[dir="rtl"] .lang-select {
 .theme-toggle {
     justify-content: center;
     min-width: 36px;
-    font-size: 15px;
     padding: 4px 8px;
 }
 
+/* Show the icon of the current theme; hide the other.
+   The :not() form keeps the moon visible before JS stamps data-theme. */
+html:not([data-theme="light"]) .icon-sun { display: none; }
+[data-theme="light"] .icon-moon { display: none; }
+
 .help-btn {
     justify-content: center;
+    gap: 6px;
     font-size: 13px;
     padding: 4px 10px;
     cursor: pointer;
@@ -185,6 +196,12 @@ html[dir="rtl"] .lang-select {
     .grid { grid-template-columns: 1fr; }
 }
 
+.io-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 /* ===== Textarea ===== */
 textarea {
     width: 100%;
@@ -208,6 +225,7 @@ button, .btn-file {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
     padding: 0 16px;
     height: 48px;
     border: 1px solid rgba(255,255,255,0.1);
