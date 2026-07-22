@@ -1,0 +1,8 @@
+# Store all text files with LF in the repository.
+* text=auto eol=lf
+
+# Called out explicitly: the product is a Go binary (gofmt/gofmt -l are only
+# meaningful when *.go is stored and checked out as LF) and release automation
+# is shell embedded in workflow YAML, which breaks under CRLF.
+*.go text eol=lf
+*.yml text eol=lf
