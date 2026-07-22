@@ -122,13 +122,22 @@ func decodeSecret(s string) ([]byte, error) {
 	return nil, errors.Errorf("unable to decode secret %q as hex or base64", s)
 }
 
-// newCheckOptions returns client options with a fresh session storage per
-// check: a session holds the negotiated auth key and DC address, so sharing
-// one across concurrent checks lets state from one proxy leak into another.
+// sharedSession is package-level and shared across all checks on purpose: the
+// auth key negotiated by the first successful check is reused by every later
+// one, so they skip the DH exchange that otherwise must complete inside the 2s
+// ExchangeTimeout. This looks like a bug (mutable state shared across
+// goroutines) and was "fixed" once — which took detection from 99/1022 to
+// 0/1022. Do not make this per-check again; see the load-bearing rule in
+// CLAUDE.md for the measurements.
+var sharedSession = &session.StorageMemory{}
+
+// newCheckOptions returns client options for one proxy check. All checks share
+// sharedSession deliberately — a real Telegram client also reuses its auth key
+// rather than running a fresh key exchange per connection.
 func newCheckOptions(resolver dcs.Resolver) telegram.Options {
 	return telegram.Options{
 		Resolver:        resolver,
-		SessionStorage:  &session.StorageMemory{},
+		SessionStorage:  sharedSession,
 		DialTimeout:     minTimeoutDuration,
 		ExchangeTimeout: 2 * time.Second,
 		NoUpdates:       true,
