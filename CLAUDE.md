@@ -7,7 +7,7 @@ Single source of truth for this repo. `AGENTS.md` is a pointer to this file.
 ## Commands
 
 ```bash
-go run .                          # dev server on :3000 (PORT env overrides)
+go run .                          # dev server on 127.0.0.1:3000 (PORT/HOST env override)
 go build -o mtproto-checker .     # single self-contained binary
 go test ./... -short              # unit tests only — skips network/proxy-file tests
 go test ./... -v                  # full run, incl. live Telegram handshake tests
@@ -73,7 +73,7 @@ The READMEs describe intent, and parts have drifted from the code. Verify agains
 - **`public/js/helpers.js` is dead code.** `index.html` loads it before `script.js`, but none of its 14 functions (`$`, `setText`, `show`, `hide`, `val`, `setVal`, `on`, `qs`, `qsa`, `enable`, `disable`, `addClass`, `rmClass`, `toggleClass`) is referenced anywhere in `script.js` or the inline handlers.
 - **`var version` is never read.** The release workflow injects it via `-ldflags -X main.version=<tag>`, but `main.go:31` is the only occurrence in the source — no flag, no endpoint, no log line surfaces it.
 - **`/check` and `/check-batch` are unused by the shipped UI.** The only `fetch()` in the frontend targets `/check-stream`.
-- **The server binds `:3000` on all interfaces with no auth, no CORS policy and no origin check**, while the entire UX assumes localhost. Anyone routable to the host can drive the checker.
+- **No auth, no CORS policy, no origin check.** The server binds `127.0.0.1:3000` by default (`resolveAddr`); setting `HOST=0.0.0.0` (or a specific address) is the explicit opt-in to wider exposure, and anyone routable can then drive the checker. `PORT` parsing is deliberately lenient (Sscanf error ignored) — preserved behavior, not endorsed design.
 - **Three product names in circulation:** "MTProto Ultimate Checker" (`index.html` `<title>`), "MTProto Pro Checker" (`<h1>` + the `title` i18n key in all four locales), "MTProto Deep Checker" (READMEs, `AGENTS.md` history).
 - **The production link parser has zero test coverage.** `main_test.go` defines and tests its own local `parseProxyLink` helper; the parser that actually runs is `parseLink` in `public/js/script.js`, and there is no JS test harness in the repo.
 - **Tests depend on a proxy list that is not in the repo.** `main_test.go` and `proxytest_test.go` read `testdata/proxies.txt` and `t.Skip` when it is absent, so `go test ./...` is largely a no-op on a fresh clone.

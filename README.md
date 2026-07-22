@@ -33,6 +33,8 @@ Download the pre-built binary for your platform from [Releases](../../releases).
 
 Run the binary. Browser opens automatically at `http://localhost:3000`.
 
+> The server listens on `127.0.0.1` only. Set the `PORT` environment variable to change the port, and `HOST=0.0.0.0` to expose it to the network — there is no authentication, so opt in deliberately.
+
 ### Option 2 — Build from Source
 
 Requires **Go 1.18+**. [Download Go](https://go.dev/dl/).

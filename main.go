@@ -31,6 +31,7 @@ var publicFS embed.FS
 var version = "dev"
 
 const (
+	defaultHost     = "127.0.0.1"
 	defaultPort     = 3000
 	testAppID       = 6
 	testAppHash     = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
@@ -185,6 +186,23 @@ func checkProxy(ctx context.Context, server string, port int, secret string, tim
 	return pingResult, nil
 }
 
+// resolveAddr builds the listen address from the HOST and PORT env values.
+// Loopback by default; exposing the server (e.g. HOST=0.0.0.0) is an explicit
+// opt-in. PORT parsing is deliberately as lenient as it always was: the
+// Sscanf error is ignored, so garbage keeps the default and a numeric prefix
+// is used as-is.
+func resolveAddr(hostEnv, portEnv string) string {
+	host := hostEnv
+	if host == "" {
+		host = defaultHost
+	}
+	port := defaultPort
+	if portEnv != "" {
+		fmt.Sscanf(portEnv, "%d", &port)
+	}
+	return net.JoinHostPort(host, fmt.Sprintf("%d", port))
+}
+
 func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -192,11 +210,6 @@ func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
 }
 
 func main() {
-	port := defaultPort
-	if p := os.Getenv("PORT"); p != "" {
-		fmt.Sscanf(p, "%d", &port)
-	}
-
 	mux := http.NewServeMux()
 
 	recoverMiddleware := func(next http.HandlerFunc) http.HandlerFunc {
@@ -496,8 +509,8 @@ func main() {
 	}
 	mux.Handle("/", http.FileServer(http.FS(embeddedFS)))
 
-	addr := fmt.Sprintf(":%d", port)
-	log.Printf("Server running at http://localhost:%d", port)
+	addr := resolveAddr(os.Getenv("HOST"), os.Getenv("PORT"))
+	log.Printf("Server running at http://%s", addr)
 
 	srv := &http.Server{
 		Addr:         addr,
