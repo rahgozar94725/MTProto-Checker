@@ -33,11 +33,14 @@ var publicFS embed.FS
 var version = "dev"
 
 const (
-	defaultHost        = "127.0.0.1"
-	defaultPort        = 3000
-	testAppID          = 6
-	testAppHash        = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
-	maxBodySize        = 50 * 1024 * 1024
+	defaultHost = "127.0.0.1"
+	defaultPort = 3000
+	testAppID   = 6
+	testAppHash = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
+	// maxBatchSize entries at ~500 B of worst-case JSON each is ~5 MiB;
+	// maxBodySize leaves headroom above that. Exceeding either → 413.
+	maxBodySize        = 8 * 1024 * 1024
+	maxBatchSize       = 10_000
 	maxConcurrency     = 50
 	defaultTimeout     = 5
 	minTimeout         = 3
@@ -248,6 +251,27 @@ func openBrowser(url string) {
 	go func() { _ = cmd.Wait() }()
 }
 
+// readCheckRequests decodes a batch request body, enforcing maxBodySize and
+// maxBatchSize. On failure it returns a non-zero HTTP status and a message the
+// caller should send as {"error": msg}; on success status is 0.
+func readCheckRequests(w http.ResponseWriter, r *http.Request) ([]CheckRequest, int, string) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
+	var reqs []CheckRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, http.StatusRequestEntityTooLarge,
+				fmt.Sprintf("request body exceeds %d bytes", maxBodySize)
+		}
+		return nil, http.StatusBadRequest, "invalid JSON"
+	}
+	if len(reqs) > maxBatchSize {
+		return nil, http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("too many proxies: %d, max %d per request", len(reqs), maxBatchSize)
+	}
+	return reqs, 0, ""
+}
+
 func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -279,6 +303,12 @@ func main() {
 
 		var req CheckRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				jsonResponse(w, http.StatusRequestEntityTooLarge,
+					map[string]string{"error": fmt.Sprintf("request body exceeds %d bytes", maxBodySize)})
+				return
+			}
 			jsonResponse(w, http.StatusBadRequest, CheckResponse{OK: false})
 			return
 		}
@@ -307,11 +337,9 @@ func main() {
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
-
-		var reqs []CheckRequest
-		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
-			jsonResponse(w, http.StatusBadRequest, nil)
+		reqs, status, msg := readCheckRequests(w, r)
+		if status != 0 {
+			jsonResponse(w, status, map[string]string{"error": msg})
 			return
 		}
 
@@ -411,22 +439,23 @@ func main() {
 			return
 		}
 
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			jsonResponse(w, http.StatusInternalServerError, map[string]string{"error": "streaming not supported"})
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
-
-		var reqs []CheckRequest
-		if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+		// Decode (and reject) before committing to SSE: a limit violation
+		// answers with plain 4xx JSON, not an empty event stream.
+		reqs, status, msg := readCheckRequests(w, r)
+		if status != 0 {
+			jsonResponse(w, status, map[string]string{"error": msg})
 			return
 		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
 
 		limit := 10
 		if l := r.Header.Get("X-Concurrency"); l != "" {
