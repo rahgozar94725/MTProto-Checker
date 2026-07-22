@@ -53,7 +53,7 @@ go build -o mtproto-checker .
 1.  **Get Proxies:** Copy your list of mixed/dirty MTProto proxies.
     > **Tip:** You can find a huge list of free proxies in [this repository](https://github.com/SoliSpirit/mtproto).
 2.  **Paste Links:** Paste them into the **"Input List"** box (formats like `tg://` or `https://t.me/proxy` are supported).
-3.  **Start Check:** Click the **"Start Deep Check"** button.
+3.  **Start Check:** Click the **"Start Check"** button.
 4.  **Wait:** The tool will filter invalid formats first, then test connections in batches.
 5.  **Copy Results:** Valid proxies will appear in the right panel. Click **"Copy"** to save them to your clipboard.
 
