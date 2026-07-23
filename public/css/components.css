@@ -339,6 +339,16 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
     word-break: break-all;
 }
 
+/* Elements that force internal LTR (so technical values never get
+   bidi-reordered) resolve logical start/end against their own LTR axis,
+   not the document's — under a RTL document their headers/labels sit at
+   the right while "start" puts the value at the left. The only way to
+   say "document end" inside a forced-LTR box is physical `right`. */
+html[dir="rtl"] .results-table td.host,
+html[dir="rtl"] .tile-v {
+    text-align: right;
+}
+
 .ping {
     display: inline-block;
     min-width: 64px;
