@@ -8,14 +8,13 @@ A powerful tool to verify **Telegram MTProto Proxies** by performing real protoc
 
 ## 🌟 Features
 
-* **Deep Inspection:** Uses `help.getNearestDC` / `help.GetConfig` requests to verify if the proxy can actually transfer Telegram data.
-* **Go Backend:** Powered by `gotd/td` — fast, stable, single binary.
-* **Smart Filtering:** Automatically detects and removes invalid secrets, spam links, and bad ports.
-* **Modern UI:** Beautiful Dark Mode interface with real-time logs and progress bars.
-* **File Upload:** Import proxy lists from .txt, .csv, or .list files — via the file button or by dragging a file onto the input list.
-* **Export Results:** Download working proxies as TXT or JSON files.
-* **Bilingual:** Supports English, Persian (Farsi), Russian, and Chinese interfaces.
-* **No Auth Needed:** Uses public test keys, so you don't need to log in with your phone number.
+* **Deep inspection:** A real MTProto handshake and a `help.getNearestDC` call through the proxy — not a TCP ping — so "working" means Telegram actually connects.
+* **Go backend:** Powered by `gotd/td` — fast, stable, one ~21MB binary with no dependencies.
+* **Paste anything:** Dirty lists are cleaned automatically — mangled `tg://` / `https://t.me` links are fixed, spam secrets and invalid ports dropped — and no phone login is needed (public test keys).
+* **Three ways to load a list:** Paste it, pick a `.txt`/`.csv`/`.list` file, or drag one onto the input box.
+* **Pause & resume:** Interrupt a scan and continue where it left off without rechecking.
+* **Results ready to use:** Working proxies land in a table sorted by ping, with per-row copy, a plain-text view, and TXT/JSON export.
+* **Interface:** Dark & light themes, four languages (English, Persian, Russian, Chinese).
 
 ## 🚀 Installation
 
@@ -52,10 +51,10 @@ go build -o mtproto-checker .
 
 1.  **Get Proxies:** Copy your list of mixed/dirty MTProto proxies.
     > **Tip:** You can find a huge list of free proxies in [this repository](https://github.com/SoliSpirit/mtproto).
-2.  **Paste Links:** Paste them into the **"Input List"** box (formats like `tg://` or `https://t.me/proxy` are supported).
+2.  **Load the List:** Paste into the **"Input List"** box, click **"File"**, or drag a file onto the box.
 3.  **Start Check:** Click the **"Start Check"** button.
-4.  **Wait:** The tool will filter invalid formats first, then test connections in batches.
-5.  **Copy Results:** Valid proxies will appear in the right panel. Click **"Copy"** to save them to your clipboard.
+4.  **Wait:** Invalid formats are filtered out first, then connections are tested in batches with live progress.
+5.  **Collect Results:** Working proxies appear in the results table, fastest first — copy a single row, click **"Copy Working List"**, or export as TXT/JSON.
 
 ## 🔌 HTTP API
 
@@ -74,21 +73,19 @@ curl -s http://127.0.0.1:3000/check \
 
 ## ⚙️ How it Works
 
-Many proxies respond to TCP pings but fail to encrypt/decrypt Telegram packets (Fake Proxies).
-This tool does the following:
+This tool spins up a real Telegram client in the background and connects exactly like the phone app does — if it succeeds, the proxy definitely works. Many proxies respond to TCP pings but fail to encrypt/decrypt Telegram packets (fake proxies).
+
 1.  **Parses & Sanitizes:** Cleans up broken links (e.g., `.&port` typos).
 2.  **Validates Secret:** Rejects secrets that are too long (spam padding) or invalid.
 3.  **Connects:** Establishes a secure MTProto connection through the proxy.
 4.  **Invokes API:** Sends a `help.getNearestDC` request to Telegram Data Centers.
 5.  **Result:** If the server replies, the proxy is marked as **Working** with its latency.
 
-## 🛠 Dependencies
+## 🛠 Tech
 
-### Go Backend (recommended)
-* [gotd/td](https://github.com/gotd/td) - MTProto API client with native MTProxy support
-* No external dependencies needed — single binary
-
-
+* [gotd/td](https://github.com/gotd/td) — MTProto API client with native MTProxy support
+* Vanilla HTML/CSS/JS frontend — no frameworks, no build step
+* Single binary, no external dependencies
 
 ## ☕ Support
 
