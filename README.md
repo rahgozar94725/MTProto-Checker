@@ -12,7 +12,7 @@ A powerful tool to verify **Telegram MTProto Proxies** by performing real protoc
 * **Go Backend:** Powered by `gotd/td` — fast, stable, single binary.
 * **Smart Filtering:** Automatically detects and removes invalid secrets, spam links, and bad ports.
 * **Modern UI:** Beautiful Dark Mode interface with real-time logs and progress bars.
-* **File Upload:** Import proxy lists from .txt, .csv, or .list files.
+* **File Upload:** Import proxy lists from .txt, .csv, or .list files — via the file button or by dragging a file onto the input list.
 * **Export Results:** Download working proxies as TXT or JSON files.
 * **Bilingual:** Supports English, Persian (Farsi), Russian, and Chinese interfaces.
 * **No Auth Needed:** Uses public test keys, so you don't need to log in with your phone number.
