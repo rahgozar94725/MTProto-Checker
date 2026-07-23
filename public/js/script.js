@@ -482,6 +482,7 @@ async function startCheck() {
 
         workingProxies = [];
         document.getElementById('outputProxies').value = '';
+        scheduleResultsRender();
 
         const total = validLinks.length;
 
