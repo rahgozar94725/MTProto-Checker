@@ -178,15 +178,53 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
     transition: width 0.3s ease;
 }
 
-.status-text {
-    text-align: center;
-    font-size: var(--text-base);
-    color: var(--text-secondary);
-    margin-top: var(--space-2);
-    direction: ltr;
-    font-family: var(--font-en);
-    font-variant-numeric: tabular-nums;
+/* ===== Stat tiles ===== */
+.stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
 }
+
+@media (max-width: 760px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.tile {
+    background: var(--input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tile-k {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+    font-weight: var(--weight-medium);
+}
+
+/* numbers are LTR data even in fa */
+.tile-v {
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-bold);
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: plaintext;
+    text-align: start;
+}
+
+.tile-v small {
+    font-size: var(--text-sm);
+    color: var(--muted);
+    font-weight: var(--weight-medium);
+}
+
+.tile-working .tile-v b { color: var(--success); }
 
 /* ===== Grid ===== */
 .grid {

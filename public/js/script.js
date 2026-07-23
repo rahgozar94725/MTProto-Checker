@@ -13,7 +13,10 @@ const translations = {
         outputPlaceholder: "نتایج سالم اینجا نمایش داده میشوند...",
         copyBtn: "کپی کردن لیست سالم",
         processing: "در حال پردازش...",
-        status: "وضعیت: {c} / {t} | سالم: {w}",
+        tileProgress: "پیشرفت",
+        tileWorking: "سالم",
+        tileBestPing: "بهترین پینگ",
+        tileFailed: "ناموفق / ردشده",
         toastCopied: "✅ کپی شد!",
         toastEmpty: "⚠️ لیست خالی است!",
         toastNoValid: "⛔ هیچ لینک معتبری یافت نشد!",
@@ -42,7 +45,10 @@ const translations = {
         outputPlaceholder: "Working proxies will appear here...",
         copyBtn: "Copy Working List",
         processing: "Processing...",
-        status: "Status: {c} / {t} | Working: {w}",
+        tileProgress: "Progress",
+        tileWorking: "Working",
+        tileBestPing: "Best ping",
+        tileFailed: "Failed / skipped",
         toastCopied: "✅ Copied to clipboard!",
         toastEmpty: "⚠️ List is empty!",
         toastNoValid: "⛔ No valid links found!",
@@ -71,7 +77,10 @@ const translations = {
         outputPlaceholder: "Рабочие прокси появятся здесь...",
         copyBtn: "Копировать список",
         processing: "Обработка...",
-        status: "Статус: {c} / {t} | Работает: {w}",
+        tileProgress: "Прогресс",
+        tileWorking: "Работает",
+        tileBestPing: "Лучший пинг",
+        tileFailed: "Ошибки / пропущено",
         toastCopied: "✅ Скопировано!",
         toastEmpty: "⚠️ Список пуст!",
         toastNoValid: "⛔ Не найдено валидных ссылок!",
@@ -100,7 +109,10 @@ const translations = {
         outputPlaceholder: "可用代理将显示在此处...",
         copyBtn: "复制可用列表",
         processing: "处理中...",
-        status: "状态: {c} / {t} | 可用: {w}",
+        tileProgress: "进度",
+        tileWorking: "可用",
+        tileBestPing: "最佳延迟",
+        tileFailed: "失败 / 跳过",
         toastCopied: "✅ 已复制!",
         toastEmpty: "⚠️ 列表为空!",
         toastNoValid: "⛔ 未找到有效链接!",
@@ -482,22 +494,34 @@ async function startCheck() {
     }
 }
 
+let lastChecked = 0, lastTotal = 0;
+
 function updateUI(c, t) {
-    const percent = (c / t) * 100;
+    lastChecked = c;
+    lastTotal = t;
+    const percent = t ? (c / t) * 100 : 0;
     document.getElementById('progressBar').style.width = percent + '%';
-    let statusText = translations[currentLang].status
-        .replace('{c}', c)
-        .replace('{t}', t)
-        .replace('{w}', workingProxies.length);
-    document.getElementById('statusText').innerText = statusText;
+    renderStats();
+}
+
+function renderStats() {
+    document.getElementById('tileChecked').textContent = lastChecked;
+    document.getElementById('tileTotal').textContent = lastTotal;
+    document.getElementById('tileWorking').textContent = workingProxies.length;
+    document.getElementById('tileBest').textContent =
+        workingProxies.length ? workingProxies[0].ping + ' ms' : '—';
+    document.getElementById('tileFailed').textContent =
+        Math.max(0, lastChecked - workingProxies.length);
+    document.getElementById('tileSkipped').textContent = skippedCount;
 }
 
 function updateOutput() {
     workingProxies.sort((a, b) => a.ping - b.ping);
     const text = workingProxies
         .map(p => `${p.link} # Ping: ${p.ping}ms`)
-        .join('\n\n'); 
+        .join('\n\n');
     document.getElementById('outputProxies').value = text;
+    renderStats();
 }
 
 function finish() {
