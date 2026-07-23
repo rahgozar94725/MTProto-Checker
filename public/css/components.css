@@ -13,7 +13,7 @@
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--space-2);
 }
 
 .header-controls .theme-toggle,
@@ -23,8 +23,8 @@
     display: flex;
     align-items: center;
     box-sizing: border-box;
-    height: 34px;
-    min-height: 34px;
+    height: var(--btn-header-h);
+    min-height: var(--btn-header-h);
     padding: 4px 10px;
     margin: 0;
     border: 1px solid var(--border);
@@ -51,7 +51,7 @@
 }
 
 .sound-toggle {
-    gap: 4px;
+    gap: var(--space-1);
     user-select: none;
 }
 
@@ -116,7 +116,6 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
 .help-btn {
     justify-content: center;
     gap: 6px;
-    font-size: 13px;
     padding: 4px 10px;
     cursor: pointer;
     border: none;
@@ -139,7 +138,7 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
 .setting-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
 }
 
 .setting-item label {
@@ -170,7 +169,7 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
 .progress-box {
     background: var(--input);
     height: 10px;
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     overflow: hidden;
 }
 
@@ -204,7 +203,7 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
 }
 
 .tile-k {
-    font-size: 11px;
+    font-size: var(--text-2xs);
     text-transform: uppercase;
     letter-spacing: .08em;
     color: var(--muted);
@@ -251,7 +250,7 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
 .count-pill {
     background: color-mix(in srgb, var(--success) 18%, transparent);
     color: var(--success);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     padding: 1px 10px;
     font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
@@ -299,7 +298,7 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
     text-align: start;
     color: var(--muted);
     font-weight: var(--weight-medium);
-    font-size: 11px;
+    font-size: var(--text-2xs);
     text-transform: uppercase;
     letter-spacing: .06em;
     padding: var(--space-2) var(--space-4);
@@ -348,7 +347,7 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--muted);
-    font-size: 11px;
+    font-size: var(--text-2xs);
     padding: 2px 8px;
     cursor: pointer;
     font-family: inherit;
@@ -385,17 +384,14 @@ textarea {
     resize: vertical;
     line-height: 1.5;
     box-sizing: border-box;
-}
-
-textarea:focus { border-color: var(--accent); }
-
-/* Proxy links are LTR data — a RTL base direction bidi-mangles their
-   wrapping (the console already forces ltr for the same reason).
-   While only the Persian placeholder is showing, stay RTL. */
-textarea {
+    /* Proxy links are LTR data — a RTL base direction bidi-mangles their
+       wrapping (the console forces ltr for the same reason). While only
+       the Persian placeholder is showing, the rule below stays RTL. */
     direction: ltr;
     text-align: left;
 }
+
+textarea:focus { border-color: var(--accent); }
 
 html[dir="rtl"] textarea:placeholder-shown {
     direction: rtl;
@@ -460,9 +456,9 @@ button, .btn-file {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 0 16px;
-    height: 48px;
+    gap: var(--space-2);
+    padding: 0 var(--space-4);
+    height: var(--btn-action-h);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: var(--radius-lg);
     font-weight: var(--weight-semibold);
@@ -577,7 +573,6 @@ button:active:not(:disabled),
     background: linear-gradient(135deg, rgba(220,38,38,0.92), rgba(185,28,28,0.92));
 }
 
-/* ===== Debug Console ===== */
 /* ===== Console drawer ===== */
 .console-drawer {
     background: var(--console-bg);
@@ -633,7 +628,7 @@ button:active:not(:disabled),
     color: #fff;
     text-align: center;
     border-radius: var(--radius-md);
-    padding: 12px 16px;
+    padding: var(--space-3) var(--space-4);
     position: fixed;
     z-index: 99;
     left: 50%;
