@@ -379,6 +379,14 @@ function togglePause() {
         log(`Resuming with ${remaining.length} unchecked...`);
         runCheckStream(remaining, globalLinkMap).then(r => {
             if (r === 'done' || r === 'timeout') finish();
+        }).catch(e => {
+            log('MAIN ERROR: ' + e.message, true);
+            alert(translations[currentLang].errorGeneric);
+            scanState = 'idle';
+            updateStartBtn();
+            document.getElementById('pauseBtn').style.display = 'none';
+            isPaused = false;
+            setScanUI(false);
         });
     }
 }
@@ -468,7 +476,11 @@ async function runCheckStream(proxies, linkMap) {
     } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-            return isPaused ? 'paused' : 'timeout';
+            if (isPaused) return 'paused';
+            // stopScan() sets scanState = 'idle' synchronously before this abort rejection's
+            // microtask runs, so scanState === 'idle' here means the user stopped the scan
+            // (as opposed to the scanTimeout watchdog firing while still 'scanning').
+            return scanState === 'idle' ? 'stopped' : 'timeout';
         }
         throw err;
     }
@@ -522,9 +534,6 @@ async function startCheck() {
         const pauseBtn = document.getElementById('pauseBtn');
         updatePauseBtn();
         pauseBtn.style.display = '';
-        setScanUI(true);
-        updateScanSummary();
-        updateUI(0, total);
 
         // Build lookup: "server:port:secret" → original link
         globalLinkMap = new Map();
@@ -533,6 +542,10 @@ async function startCheck() {
         }
 
         allProxies = validLinks;
+
+        setScanUI(true);
+        updateScanSummary();
+        updateUI(0, total);
 
         const result = await runCheckStream(allProxies, globalLinkMap);
         if (result === 'done' || result === 'timeout') {
