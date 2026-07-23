@@ -37,7 +37,8 @@ const translations = {
         viewTable: "جدول",
         viewText: "متن ساده",
         summaryLoaded: "{n} لینک بارگذاری شد · {m} رد شد",
-        emptyHint: "لینک‌های پروکسی را اینجا جای‌گذاری کنید — هر خط یک لینک — یا فایل انتخاب کنید"
+        emptyHint: "لینک‌های پروکسی را اینجا جای‌گذاری کنید — هر خط یک لینک — یا فایل انتخاب کنید",
+        activityLog: "گزارش فعالیت"
     },
     en: {
         title: "MTProto Checker",
@@ -77,7 +78,8 @@ const translations = {
         viewTable: "Table",
         viewText: "Plain text",
         summaryLoaded: "{n} links loaded · {m} skipped",
-        emptyHint: "Paste proxy links here — one per line — or load a file"
+        emptyHint: "Paste proxy links here — one per line — or load a file",
+        activityLog: "Activity log"
     },
     ru: {
         title: "MTProto Checker",
@@ -117,7 +119,8 @@ const translations = {
         viewTable: "Таблица",
         viewText: "Текст",
         summaryLoaded: "{n} ссылок загружено · {m} пропущено",
-        emptyHint: "Вставьте ссылки на прокси — по одной в строке — или загрузите файл"
+        emptyHint: "Вставьте ссылки на прокси — по одной в строке — или загрузите файл",
+        activityLog: "Журнал активности"
     },
     zh: {
         title: "MTProto Checker",
@@ -157,7 +160,8 @@ const translations = {
         viewTable: "表格",
         viewText: "纯文本",
         summaryLoaded: "已加载 {n} 条链接 · 跳过 {m} 条",
-        emptyHint: "在此粘贴代理链接（每行一个），或加载文件"
+        emptyHint: "在此粘贴代理链接（每行一个），或加载文件",
+        activityLog: "活动日志"
     }
 };
 
@@ -250,6 +254,10 @@ function log(msg, kind = null) {
     line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
     if (kind === true || kind === 'error') line.className = 'error-log';
     else if (kind === 'ok') line.className = 'ok-log';
+    if (kind === true || kind === 'error') {
+        const drawer = document.getElementById('consoleDrawer');
+        if (drawer) drawer.open = true;
+    }
     c.appendChild(line);
     while (c.children.length > MAX_LOG_LINES) {
         c.removeChild(c.firstChild);

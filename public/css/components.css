@@ -575,6 +575,32 @@ button:active:not(:disabled),
 }
 
 /* ===== Debug Console ===== */
+/* ===== Console drawer ===== */
+.console-drawer {
+    background: var(--console-bg);
+    border: 1px solid var(--console-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.console-drawer summary {
+    cursor: pointer;
+    list-style: none;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.console-drawer summary::before {
+    content: "▸ ";
+    color: var(--muted);
+}
+
+.console-drawer[open] summary::before {
+    content: "▾ ";
+}
+
 .debug-console {
     background: var(--console-bg);
     color: var(--console-text);
@@ -584,8 +610,9 @@ button:active:not(:disabled),
     padding: var(--space-3);
     height: 120px;
     overflow-y: auto;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--console-border);
+    border: none;
+    border-radius: 0;
+    border-block-start: 1px solid var(--console-border);
     direction: ltr;
     text-align: left;
     scrollbar-width: thin;
