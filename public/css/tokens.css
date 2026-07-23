@@ -49,18 +49,22 @@
     --font-en: 'Inter', system-ui, -apple-system, sans-serif;
     --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 
-    /* Type scale: micro labels / mono data / UI meta / body / actions / page title */
-    --text-2xs: 11px;
-    --text-xs: 12px;
-    --text-sm: 13px;
-    --text-base: 14px;
-    --text-md: 15px;
-    --text-xl: 22px;
-    --text-2xl: 26px;
+    /* Type scale: micro labels / mono data / UI meta / body / actions / page title.
+       rem so the scale follows the user's browser font-size setting;
+       values are 11/12/13/14/15/22/26 px at the default 16px root. */
+    --text-2xs: 0.6875rem;
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-base: 0.875rem;
+    --text-md: 0.9375rem;
+    --text-xl: 1.375rem;
+    --text-2xl: 1.625rem;
 
-    /* The two button systems (see CLAUDE.md): 48px glass actions, 34px flat header controls */
-    --btn-action-h: 48px;
-    --btn-header-h: 34px;
+    /* The two button systems (see CLAUDE.md): 48px glass actions, 34px flat
+       header controls at the default root size; rem + min-height so scaled
+       text grows the control instead of clipping. */
+    --btn-action-h: 3rem;
+    --btn-header-h: 2.125rem;
     --weight-medium: 500;
     --weight-semibold: 600;
     --weight-bold: 700;

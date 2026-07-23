@@ -23,7 +23,6 @@
     display: flex;
     align-items: center;
     box-sizing: border-box;
-    height: var(--btn-header-h);
     min-height: var(--btn-header-h);
     padding: 4px 10px;
     margin: 0;
@@ -274,7 +273,7 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
 }
 
 .view-toggle button {
-    height: 24px;
+    min-height: 1.5rem;
     padding: 0 12px;
     font-size: var(--text-sm);
     background: transparent;
@@ -472,7 +471,7 @@ button, .btn-file {
     justify-content: center;
     gap: var(--space-2);
     padding: 0 var(--space-4);
-    height: var(--btn-action-h);
+    min-height: var(--btn-action-h);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: var(--radius-lg);
     font-weight: var(--weight-semibold);
