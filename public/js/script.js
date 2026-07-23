@@ -37,6 +37,8 @@ const translations = {
         viewTable: "جدول",
         viewText: "متن ساده",
         summaryLoaded: "{n} لینک بارگذاری شد · {m} رد شد",
+        toastBadFileType: "⛔ نوع فایل پشتیبانی نمی‌شود — از txt یا csv یا list استفاده کنید",
+        toastMultiFile: "⚠️ فقط یک فایل رها کنید",
         emptyHint: "لینک‌های پروکسی را اینجا جای‌گذاری کنید — هر خط یک لینک — یا فایل انتخاب کنید",
         activityLog: "گزارش فعالیت"
     },
@@ -78,6 +80,8 @@ const translations = {
         viewTable: "Table",
         viewText: "Plain text",
         summaryLoaded: "{n} links loaded · {m} skipped",
+        toastBadFileType: "⛔ Unsupported file type — use .txt, .csv or .list",
+        toastMultiFile: "⚠️ Drop a single file",
         emptyHint: "Paste proxy links here — one per line — or load a file",
         activityLog: "Activity log"
     },
@@ -119,6 +123,8 @@ const translations = {
         viewTable: "Таблица",
         viewText: "Текст",
         summaryLoaded: "{n} ссылок загружено · {m} пропущено",
+        toastBadFileType: "⛔ Неподдерживаемый тип файла — используйте .txt, .csv или .list",
+        toastMultiFile: "⚠️ Перетащите только один файл",
         emptyHint: "Вставьте ссылки на прокси — по одной в строке — или загрузите файл",
         activityLog: "Журнал активности"
     },
@@ -160,6 +166,8 @@ const translations = {
         viewTable: "表格",
         viewText: "纯文本",
         summaryLoaded: "已加载 {n} 条链接 · 跳过 {m} 条",
+        toastBadFileType: "⛔ 不支持的文件类型 — 请使用 .txt、.csv 或 .list",
+        toastMultiFile: "⚠️ 一次只能拖放一个文件",
         emptyHint: "在此粘贴代理链接（每行一个），或加载文件",
         activityLog: "活动日志"
     }
@@ -740,18 +748,77 @@ function syncSoundUI() {
     el.className = 'sound-state ' + (on ? 'on' : 'off');
 }
 
-function handleFileUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
+function readProxyFile(file) {
     const reader = new FileReader();
     reader.onload = function(e) {
         document.getElementById('inputProxies').value = e.target.result;
         log(`Loaded file: ${file.name} (${(file.size / 1024).toFixed(1)}KB)`);
     };
     reader.readAsText(file);
+}
+
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    readProxyFile(file);
     event.target.value = '';
 }
+
+// Drag & drop onto the input zone feeds the same reader as the file picker.
+const ACCEPTED_EXTENSIONS = ['.txt', '.csv', '.list'];
+
+(function wireDropZone() {
+    const pane = document.querySelector('.io-pane');
+    if (!pane) return;
+    const input = document.getElementById('inputProxies');
+    // dragenter/dragleave fire for every child crossing; a depth counter
+    // keeps the highlight stable until the pointer truly leaves the pane
+    let depth = 0;
+
+    pane.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        depth++;
+        pane.classList.add('dragover');
+    });
+
+    // preventDefault here is what stops the browser from navigating to the
+    // dropped file (which would discard the user's pasted list)
+    pane.addEventListener('dragover', (e) => e.preventDefault());
+
+    pane.addEventListener('dragleave', () => {
+        depth--;
+        if (depth <= 0) {
+            depth = 0;
+            pane.classList.remove('dragover');
+        }
+    });
+
+    pane.addEventListener('drop', (e) => {
+        e.preventDefault();
+        depth = 0;
+        pane.classList.remove('dragover');
+        const t = translations[currentLang];
+        const files = e.dataTransfer.files;
+
+        if (files.length > 1) return showToast(t.toastMultiFile, true);
+
+        if (files.length === 1) {
+            const name = files[0].name.toLowerCase();
+            if (!ACCEPTED_EXTENSIONS.some(ext => name.endsWith(ext))) {
+                return showToast(t.toastBadFileType, true);
+            }
+            return readProxyFile(files[0]);
+        }
+
+        // a dragged text selection (e.g. links from another window):
+        // preventDefault killed the native insert, so append it ourselves
+        const text = e.dataTransfer.getData('text/plain');
+        if (text) {
+            input.value = input.value ? input.value.replace(/\n?$/, '\n') + text : text;
+            log(`Dropped text (${text.length} chars)`);
+        }
+    });
+})();
 
 function exportResults(format) {
     const t = translations[currentLang];

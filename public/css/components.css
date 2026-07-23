@@ -450,6 +450,17 @@ body.scanning .input-summary { display: flex; }
 
 .io-pane textarea:placeholder-shown + .empty-hint { opacity: 1; }
 
+/* Drop-target state while a drag hovers the input zone */
+.io-pane.dragover textarea {
+    border-color: var(--accent);
+    border-style: dashed;
+    background-color: color-mix(in srgb, var(--accent) 8%, var(--input));
+}
+
+.io-pane.dragover .empty-hint {
+    color: var(--accent);
+}
+
 .empty-hint .icon { width: 28px; height: 28px; opacity: 0.6; }
 .empty-hint p { margin: 0; font-size: var(--text-base); max-width: 46ch; }
 
