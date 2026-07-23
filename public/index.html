@@ -86,7 +86,14 @@
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
             <span data-i18n="inputLabel">لیست ورودی</span>
         </label>
-        <textarea id="inputProxies" placeholder="..."></textarea>
+        <div class="io-pane">
+            <textarea id="inputProxies" placeholder="..."></textarea>
+            <div class="empty-hint">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                <p data-i18n="emptyHint">لینک‌های پروکسی را اینجا جای‌گذاری کنید — هر خط یک لینک — یا فایل انتخاب کنید</p>
+                <code>tg://proxy?server=1.2.3.4&amp;port=443&amp;secret=ee0011…</code>
+            </div>
+        </div>
         <div class="input-summary" id="inputSummary"></div>
         <div class="btn-row">
             <button class="btn-start" id="startBtn" onclick="handleStartStop()">شروع بررسی</button>

@@ -35,7 +35,9 @@ const translations = {
         thPing: "پینگ",
         rowCopy: "کپی",
         viewTable: "جدول",
-        viewText: "متن ساده"
+        viewText: "متن ساده",
+        summaryLoaded: "{n} لینک بارگذاری شد · {m} رد شد",
+        emptyHint: "لینک‌های پروکسی را اینجا جای‌گذاری کنید — هر خط یک لینک — یا فایل انتخاب کنید"
     },
     en: {
         title: "MTProto Checker",
@@ -73,7 +75,9 @@ const translations = {
         thPing: "Ping",
         rowCopy: "Copy",
         viewTable: "Table",
-        viewText: "Plain text"
+        viewText: "Plain text",
+        summaryLoaded: "{n} links loaded · {m} skipped",
+        emptyHint: "Paste proxy links here — one per line — or load a file"
     },
     ru: {
         title: "MTProto Checker",
@@ -111,7 +115,9 @@ const translations = {
         thPing: "Пинг",
         rowCopy: "Копия",
         viewTable: "Таблица",
-        viewText: "Текст"
+        viewText: "Текст",
+        summaryLoaded: "{n} ссылок загружено · {m} пропущено",
+        emptyHint: "Вставьте ссылки на прокси — по одной в строке — или загрузите файл"
     },
     zh: {
         title: "MTProto Checker",
@@ -149,7 +155,9 @@ const translations = {
         thPing: "延迟",
         rowCopy: "复制",
         viewTable: "表格",
-        viewText: "纯文本"
+        viewText: "纯文本",
+        summaryLoaded: "已加载 {n} 条链接 · 跳过 {m} 条",
+        emptyHint: "在此粘贴代理链接（每行一个），或加载文件"
     }
 };
 
@@ -210,10 +218,22 @@ function updateStartBtn() {
     }
 }
 
+function setScanUI(scanning) {
+    document.body.classList.toggle('scanning', scanning);
+}
+
+function updateScanSummary() {
+    const t = translations[currentLang];
+    document.getElementById('inputSummary').textContent = t.summaryLoaded
+        .replace('{n}', allProxies.length)
+        .replace('{m}', skippedCount);
+}
+
 function changeLanguage(lang) {
     setLanguage(lang);
     updatePauseBtn();
     updateStartBtn();
+    if (scanState === 'scanning') updateScanSummary();
     scheduleResultsRender();
 }
 
@@ -325,6 +345,7 @@ function stopScan() {
     }
     scanState = 'idle';
     updateStartBtn();
+    setScanUI(false);
     document.getElementById('pauseBtn').style.display = 'none';
     isPaused = false;
     log('STOPPED');
@@ -493,6 +514,8 @@ async function startCheck() {
         const pauseBtn = document.getElementById('pauseBtn');
         updatePauseBtn();
         pauseBtn.style.display = '';
+        setScanUI(true);
+        updateScanSummary();
         updateUI(0, total);
 
         // Build lookup: "server:port:secret" → original link
@@ -516,6 +539,7 @@ async function startCheck() {
         alert(translations[currentLang].errorGeneric);
         scanState = 'idle';
         updateStartBtn();
+        setScanUI(false);
         document.getElementById('pauseBtn').style.display = 'none';
     }
 }
@@ -616,6 +640,7 @@ function finish() {
     const pauseBtn = document.getElementById('pauseBtn');
     scanState = 'idle';
     updateStartBtn();
+    setScanUI(false);
     pauseBtn.style.display = 'none';
     isPaused = false;
     log('Process finished.');
