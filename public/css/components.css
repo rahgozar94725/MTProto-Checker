@@ -30,6 +30,9 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     font-size: var(--text-sm);
+    /* form controls don't inherit the page font by default — without this
+       the select renders Persian in the browser's fallback font */
+    font-family: inherit;
     background: var(--input);
     color: var(--text);
     cursor: pointer;
