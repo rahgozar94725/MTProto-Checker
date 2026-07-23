@@ -264,28 +264,36 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
     unicode-bidi: plaintext;
 }
 
+/* Segmented pill: rounded track, selected state rides as a raised pill */
 .view-toggle {
     display: flex;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    overflow: hidden;
+    background: var(--input);
+    border-radius: var(--radius-full);
+    padding: 3px;
+    gap: 2px;
 }
 
 .view-toggle button {
-    height: 30px;
+    height: 24px;
     padding: 0 12px;
     font-size: var(--text-sm);
-    background: var(--input);
+    background: transparent;
     color: var(--muted);
     border: none;
+    border-radius: var(--radius-full);
     cursor: pointer;
     font-family: inherit;
 }
 
+.view-toggle button:hover {
+    color: var(--text);
+}
+
 .view-toggle button[aria-pressed="true"] {
-    background: var(--input-hover);
+    background: var(--card);
     color: var(--text);
     font-weight: var(--weight-semibold);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
 }
 
 .results-table-wrap {
