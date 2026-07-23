@@ -226,22 +226,147 @@ html:not([data-theme="light"]) .icon-sun { display: none; }
 
 .tile-working .tile-v b { color: var(--success); }
 
-/* ===== Grid ===== */
-.grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-5);
-}
-
-@media (max-width: 768px) {
-    .grid { grid-template-columns: 1fr; }
-}
-
 .io-label {
     display: flex;
     align-items: center;
     gap: 6px;
 }
+
+/* ===== Results panel ===== */
+.results { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.results-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+.results-head .io-label { margin-bottom: 0; }
+
+.count-pill {
+    background: color-mix(in srgb, var(--success) 18%, transparent);
+    color: var(--success);
+    border-radius: 999px;
+    padding: 1px 10px;
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: plaintext;
+}
+
+.view-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.view-toggle button {
+    height: 30px;
+    padding: 0 12px;
+    font-size: var(--text-sm);
+    background: var(--input);
+    color: var(--muted);
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.view-toggle button[aria-pressed="true"] {
+    background: var(--input-hover);
+    color: var(--text);
+    font-weight: var(--weight-semibold);
+}
+
+.results-table-wrap {
+    background: var(--input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    max-height: 420px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+.results-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+
+.results-table th {
+    text-align: start;
+    color: var(--muted);
+    font-weight: var(--weight-medium);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: var(--space-2) var(--space-4);
+    border-block-end: 1px solid var(--border);
+    position: sticky;
+    inset-block-start: 0;
+    background: var(--input);
+}
+
+.results-table td {
+    padding: var(--space-2) var(--space-4);
+    border-block-end: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.results-table tr:last-child td { border-block-end: none; }
+
+.results-table td.rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.results-table td.host {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    direction: ltr;
+    unicode-bidi: plaintext;
+    text-align: start;
+    word-break: break-all;
+}
+
+.ping {
+    display: inline-block;
+    min-width: 64px;
+    text-align: center;
+    border-radius: var(--radius-sm);
+    padding: 2px 8px;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    direction: ltr;
+    unicode-bidi: plaintext;
+}
+.p-fast { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+.p-mid  { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.p-slow { background: color-mix(in srgb, var(--error) 16%, transparent); color: var(--error); }
+
+.rowcopy {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    height: auto;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+.rowcopy:hover { border-color: var(--accent); color: var(--text); }
+
+.results-empty {
+    padding: var(--space-8) var(--space-4);
+    text-align: center;
+    color: var(--muted);
+}
+
+/* view switching + empty state */
+.results[data-view="table"] > #outputProxies { display: none; }
+.results[data-view="text"] .results-table-wrap { display: none; }
+.results.has-results .results-empty { display: none; }
+.results:not(.has-results) .results-table { display: none; }
 
 /* ===== Textarea ===== */
 textarea {

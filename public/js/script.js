@@ -29,7 +29,13 @@ const translations = {
         exportJsonBtn: "JSON",
         toastExported: "✅ فایل دانلود شد!",
         concurrencyLabel: "تعداد همزمان",
-        timeoutLabel: "تایم‌اوت (ثانیه)"
+        timeoutLabel: "تایم‌اوت (ثانیه)",
+        thServer: "سرور",
+        thPort: "پورت",
+        thPing: "پینگ",
+        rowCopy: "کپی",
+        viewTable: "جدول",
+        viewText: "متن ساده"
     },
     en: {
         title: "MTProto Checker",
@@ -61,7 +67,13 @@ const translations = {
         exportJsonBtn: "JSON",
         toastExported: "✅ File downloaded!",
         concurrencyLabel: "Concurrent",
-        timeoutLabel: "Timeout (sec)"
+        timeoutLabel: "Timeout (sec)",
+        thServer: "Server",
+        thPort: "Port",
+        thPing: "Ping",
+        rowCopy: "Copy",
+        viewTable: "Table",
+        viewText: "Plain text"
     },
     ru: {
         title: "MTProto Checker",
@@ -93,7 +105,13 @@ const translations = {
         exportJsonBtn: "JSON",
         toastExported: "✅ Файл загружен!",
         concurrencyLabel: "Одновременно",
-        timeoutLabel: "Тайм-аут (сек)"
+        timeoutLabel: "Тайм-аут (сек)",
+        thServer: "Сервер",
+        thPort: "Порт",
+        thPing: "Пинг",
+        rowCopy: "Копия",
+        viewTable: "Таблица",
+        viewText: "Текст"
     },
     zh: {
         title: "MTProto Checker",
@@ -125,7 +143,13 @@ const translations = {
         exportJsonBtn: "JSON",
         toastExported: "✅ 文件已下载!",
         concurrencyLabel: "并发数",
-        timeoutLabel: "超时（秒）"
+        timeoutLabel: "超时（秒）",
+        thServer: "服务器",
+        thPort: "端口",
+        thPing: "延迟",
+        rowCopy: "复制",
+        viewTable: "表格",
+        viewText: "纯文本"
     }
 };
 
@@ -190,6 +214,7 @@ function changeLanguage(lang) {
     setLanguage(lang);
     updatePauseBtn();
     updateStartBtn();
+    scheduleResultsRender();
 }
 
 setLanguage(currentLang);
@@ -402,7 +427,7 @@ async function runCheckStream(proxies, linkMap) {
 
                     if (data.ok) {
                         const orig = linkMap.get(key) || `tg://proxy?server=${data.server}&port=${data.port}&secret=${data.secret}`;
-                        workingProxies.push({ link: orig, ping: data.ping });
+                        workingProxies.push({ link: orig, ping: data.ping, server: data.server, port: data.port });
                         log(`SUCCESS: ${data.server} (${data.ping}ms)`, 'ok');
                         updateOutput();
                     }
@@ -515,14 +540,75 @@ function renderStats() {
     document.getElementById('tileSkipped').textContent = skippedCount;
 }
 
+function proxyLine(p) {
+    return `${p.link} # Ping: ${p.ping}ms`;
+}
+
 function updateOutput() {
     workingProxies.sort((a, b) => a.ping - b.ping);
-    const text = workingProxies
-        .map(p => `${p.link} # Ping: ${p.ping}ms`)
-        .join('\n\n');
-    document.getElementById('outputProxies').value = text;
+    document.getElementById('outputProxies').value = workingProxies.map(proxyLine).join('\n\n');
+    scheduleResultsRender();
     renderStats();
 }
+
+let resultsRenderQueued = false;
+function scheduleResultsRender() {
+    if (resultsRenderQueued) return;
+    resultsRenderQueued = true;
+    requestAnimationFrame(() => {
+        resultsRenderQueued = false;
+        renderResultsTable();
+    });
+}
+
+// Safe DOM only: server/port come from user-pasted URLs — never innerHTML here.
+function renderResultsTable() {
+    const tbody = document.getElementById('resultsBody');
+    const rowCopyLabel = translations[currentLang].rowCopy;
+    const frag = document.createDocumentFragment();
+    workingProxies.forEach((p, i) => {
+        const tr = document.createElement('tr');
+        const rank = document.createElement('td');
+        rank.className = 'rank';
+        rank.textContent = i + 1;
+        const host = document.createElement('td');
+        host.className = 'host';
+        host.textContent = p.server;
+        const port = document.createElement('td');
+        port.className = 'host';
+        port.textContent = p.port;
+        const ping = document.createElement('td');
+        const badge = document.createElement('span');
+        badge.className = 'ping ' + (p.ping < 180 ? 'p-fast' : p.ping < 300 ? 'p-mid' : 'p-slow');
+        badge.textContent = p.ping + ' ms';
+        ping.appendChild(badge);
+        const act = document.createElement('td');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'rowcopy';
+        btn.dataset.index = i;
+        btn.textContent = rowCopyLabel;
+        act.appendChild(btn);
+        tr.append(rank, host, port, ping, act);
+        frag.appendChild(tr);
+    });
+    tbody.replaceChildren(frag);
+    document.getElementById('resultsCount').textContent = workingProxies.length;
+    document.getElementById('resultsPanel').classList.toggle('has-results', workingProxies.length > 0);
+}
+
+function setResultsView(view) {
+    document.getElementById('resultsPanel').dataset.view = view;
+    document.getElementById('viewTableBtn').setAttribute('aria-pressed', String(view === 'table'));
+    document.getElementById('viewTextBtn').setAttribute('aria-pressed', String(view === 'text'));
+}
+
+document.getElementById('resultsBody').addEventListener('click', (e) => {
+    const btn = e.target.closest('.rowcopy');
+    if (!btn) return;
+    const p = workingProxies[Number(btn.dataset.index)];
+    if (p) copyText(proxyLine(p));
+});
 
 function finish() {
     const t = translations[currentLang];
@@ -541,11 +627,8 @@ function finish() {
     }
 }
 
-function copyResults() {
+function copyText(text) {
     const t = translations[currentLang];
-    const text = document.getElementById("outputProxies").value;
-    if (!text) return showToast(t.toastEmpty, true);
-
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(() => {
             showToast(t.toastCopied);
@@ -553,6 +636,12 @@ function copyResults() {
     } else {
         fallbackCopy(text);
     }
+}
+
+function copyResults() {
+    const t = translations[currentLang];
+    if (workingProxies.length === 0) return showToast(t.toastEmpty, true);
+    copyText(workingProxies.map(proxyLine).join('\n\n'));
 }
 
 function fallbackCopy(text) {
@@ -618,21 +707,16 @@ function handleFileUpload(event) {
 }
 
 function exportResults(format) {
-    const text = document.getElementById('outputProxies').value;
-    if (!text) return showToast(translations[currentLang].toastEmpty, true);
+    const t = translations[currentLang];
+    if (workingProxies.length === 0) return showToast(t.toastEmpty, true);
 
     let content, filename, type;
     if (format === 'json') {
-        const lines = text.split('\n\n').filter(l => l.trim());
-        const data = lines.map(line => {
-            const match = line.match(/(.+?)\s*#\s*Ping:\s*(\d+)ms/);
-            return match ? { link: match[1].trim(), ping: parseInt(match[2]) } : { link: line.trim(), ping: null };
-        });
-        content = JSON.stringify(data, null, 2);
+        content = JSON.stringify(workingProxies.map(p => ({ link: p.link, ping: p.ping })), null, 2);
         filename = 'proxies.json';
         type = 'application/json';
     } else {
-        content = text;
+        content = workingProxies.map(proxyLine).join('\n\n');
         filename = 'proxies.txt';
         type = 'text/plain';
     }
@@ -644,7 +728,7 @@ function exportResults(format) {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
-    showToast(translations[currentLang].toastExported || 'Exported!');
+    showToast(t.toastExported || 'Exported!');
 }
 
 const soundCheck = document.getElementById('soundCheck');

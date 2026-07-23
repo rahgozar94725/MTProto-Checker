@@ -81,43 +81,65 @@
         <div class="progress-box"><div class="progress-bar" id="progressBar"></div></div>
     </div>
 
-    <div class="grid">
-        <div>
-            <label class="io-label" for="inputProxies">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-                <span data-i18n="inputLabel">لیست ورودی</span>
+    <div class="input-section">
+        <label class="io-label" for="inputProxies">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+            <span data-i18n="inputLabel">لیست ورودی</span>
+        </label>
+        <textarea id="inputProxies" placeholder="..."></textarea>
+        <div class="input-summary" id="inputSummary"></div>
+        <div class="btn-row">
+            <button class="btn-start" id="startBtn" onclick="handleStartStop()">شروع بررسی</button>
+            <button class="btn-pause" id="pauseBtn" onclick="togglePause()" style="display:none">توقف موقت</button>
+            <label class="btn-file">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <span data-i18n="fileBtn">فایل</span>
+                <input type="file" id="fileInput" accept=".txt,.csv,.list" onchange="handleFileUpload(event)" style="display:none">
             </label>
-            <textarea id="inputProxies" placeholder="..."></textarea>
-            <div class="btn-row">
-                <button class="btn-start" id="startBtn" onclick="handleStartStop()">شروع بررسی</button>
-                <button class="btn-pause" id="pauseBtn" onclick="togglePause()" style="display:none">توقف موقت</button>
-                <label class="btn-file">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                    <span data-i18n="fileBtn">فایل</span>
-                    <input type="file" id="fileInput" accept=".txt,.csv,.list" onchange="handleFileUpload(event)" style="display:none">
-                </label>
-            </div>
         </div>
-        <div>
-            <label class="io-label" for="outputProxies">
+    </div>
+
+    <div class="results" id="resultsPanel" data-view="table">
+        <div class="results-head">
+            <label class="io-label">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>
                 <span data-i18n="outputLabel">لیست سالم</span>
+                <span class="count-pill" id="resultsCount">0</span>
             </label>
-            <textarea id="outputProxies" readonly placeholder="..."></textarea>
-            <div class="btn-row">
-                <button class="btn-copy" onclick="copyResults()">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                    <span data-i18n="copyBtn">کپی لیست سالم</span>
-                </button>
-                <button class="btn-export" onclick="exportResults('txt')">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
-                    <span data-i18n="exportTxtBtn">TXT</span>
-                </button>
-                <button class="btn-export" onclick="exportResults('json')">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
-                    <span data-i18n="exportJsonBtn">JSON</span>
-                </button>
+            <div class="results-tools">
+                <div class="view-toggle" role="group">
+                    <button type="button" id="viewTableBtn" aria-pressed="true" onclick="setResultsView('table')" data-i18n="viewTable">جدول</button>
+                    <button type="button" id="viewTextBtn" aria-pressed="false" onclick="setResultsView('text')" data-i18n="viewText">متن ساده</button>
+                </div>
             </div>
+        </div>
+        <div class="results-table-wrap">
+            <table class="results-table">
+                <thead><tr>
+                    <th>#</th>
+                    <th data-i18n="thServer">سرور</th>
+                    <th data-i18n="thPort">پورت</th>
+                    <th data-i18n="thPing">پینگ</th>
+                    <th></th>
+                </tr></thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+            <div class="results-empty" data-i18n="outputPlaceholder">نتایج سالم اینجا نمایش داده میشوند...</div>
+        </div>
+        <textarea id="outputProxies" readonly placeholder="..."></textarea>
+        <div class="btn-row">
+            <button class="btn-copy" onclick="copyResults()">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <span data-i18n="copyBtn">کپی لیست سالم</span>
+            </button>
+            <button class="btn-export" onclick="exportResults('txt')">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+                <span data-i18n="exportTxtBtn">TXT</span>
+            </button>
+            <button class="btn-export" onclick="exportResults('json')">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+                <span data-i18n="exportJsonBtn">JSON</span>
+            </button>
         </div>
     </div>
 
