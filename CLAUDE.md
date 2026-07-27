@@ -86,3 +86,17 @@ The READMEs describe intent, and parts have drifted from the code. Verify agains
 - **`images/screenshot*.png` are stale again** after the results-workbench restructure (stat tiles, collapsing input zone, table/plain-text results panel, console drawer) — they still show the old status-line/two-textarea layout.
 
 Every item above is documentation of current state. Fixes go through brainstorming → plan first, not opportunistic edits.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `rahgozar94725/MTProto-Checker`, driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` + `docs/adr/` at the repo root, created lazily by `/domain-modeling`. See `docs/agents/domain.md`.
