@@ -74,7 +74,7 @@ Single-process Go server (`main.go`, ~600 lines) + vanilla-JS frontend embedded 
 
 **Concurrency** comes from the `X-Concurrency` request header, clamped to `[1, maxConcurrency = 50]`, enforced by a buffered-channel semaphore. Note the server's own fallback when the header is absent is `10`, while the UI's default selection is `50`.
 
-**Frontend** — seven ES modules under `public/js/`, no bundler and still no build step. `public/index.html` loads exactly one of them, `<script type="module" src="/js/app.js">`; the browser fetches the rest. Module scripts are deferred, so a four-line inline script in `<head>` applies the persisted `data-theme`, `dir` and `lang` before CSS paints — without it a light-theme or LTR user gets a dark/RTL flash.
+**Frontend** — seven ES modules under `public/js/`, no bundler and still no build step. `public/index.html` loads exactly one of them, `<script type="module" src="/js/app.js">`; the browser fetches the rest. Module scripts are deferred, so a small inline script in `<head>` applies the persisted `data-theme`, `dir` and `lang` before CSS paints — without it a light-theme or LTR user gets a dark/RTL flash. It carries its own copy of the locale list (`fa`/`en`/`ru`/`zh`) because it runs before the module graph exists and cannot import `i18n.js`, so **adding a locale means editing `index.html` too** — otherwise an unknown stored `lang` paints LTR and `resolveLang()` flips it to RTL a moment later. `tests/unit/boot.test.js` runs that script against stub globals.
 
 | Module | Lines | Owns |
 |---|---|---|
