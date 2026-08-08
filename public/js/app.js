@@ -1,7 +1,17 @@
 import { translations, interpolate } from './i18n.js';
-import { proxyLine, pingClass } from './format.js';
+import { proxyLine } from './format.js';
 import { parseProxyList, proxyKey, isAcceptedFilename } from './parse.js';
 import { createSSEParser } from './sse.js';
+import {
+    renderResultsTable,
+    renderStats as renderStatTiles,
+    setResultsView as applyResultsView,
+    showToast as paintToast,
+} from './render.js';
+import { createScanState } from './state.js';
+
+// All mutable scan state lives here; nothing below declares its own.
+const state = createScanState();
 
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
@@ -16,7 +26,6 @@ function toggleTheme() {
 }
 
 let currentLang = localStorage.getItem('lang') || 'fa';
-let scanState = 'idle'; // 'idle' | 'scanning'
 
 function setLanguage(lang) {
     currentLang = lang;
@@ -42,14 +51,14 @@ function updatePauseBtn() {
     const btn = document.getElementById('pauseBtn');
     if (!btn) return;
     const t = translations[currentLang];
-    btn.textContent = isPaused ? t.resumeBtn : t.pauseBtn;
-    btn.className = 'btn-pause' + (isPaused ? ' resume' : '');
+    btn.textContent = state.isPaused ? t.resumeBtn : t.pauseBtn;
+    btn.className = 'btn-pause' + (state.isPaused ? ' resume' : '');
 }
 
 function updateStartBtn() {
     const btn = document.getElementById('startBtn');
     const t = translations[currentLang];
-    const idle = scanState === 'idle';
+    const idle = state.scanState === 'idle';
     btn.innerText = idle ? t.startBtn : t.stopBtn;
     btn.className = idle ? 'btn-start' : 'btn-stop';
     btn.disabled = false;
@@ -62,8 +71,8 @@ function setScanUI(scanning) {
 function updateScanSummary() {
     const t = translations[currentLang];
     document.getElementById('inputSummary').textContent = interpolate(t.summaryLoaded, {
-        n: allProxies.length,
-        m: lastSkipped
+        n: state.allProxies.length,
+        m: state.lastSkipped
     });
 }
 
@@ -71,7 +80,7 @@ function changeLanguage(lang) {
     setLanguage(lang);
     updatePauseBtn();
     updateStartBtn();
-    if (scanState === 'scanning') updateScanSummary();
+    if (state.scanState === 'scanning') updateScanSummary();
     scheduleResultsRender();
 }
 
@@ -103,16 +112,6 @@ function log(msg, kind = null) {
 window.onerror = function(message) {
     log(`CRITICAL ERROR: ${message}`, true);
 };
-
-let workingProxies = [];
-// Spam links dropped by the last parse — display state for #tileSkipped, written once
-// per scan from parseProxyList's return value.
-let lastSkipped = 0;
-let isPaused = false;
-let currentController = null;
-let checkedKeys = new Set();
-let allProxies = [];
-let globalLinkMap = new Map();
 
 function getConcurrency() {
     return parseInt(document.getElementById('concurrencySelect').value) || 50;
@@ -155,22 +154,22 @@ function openHelp() {
 }
 
 function handleStartStop() {
-    if (scanState === 'idle') startCheck();
+    if (state.scanState === 'idle') startCheck();
     else stopScan();
 }
 
 function abortInFlight() {
-    if (currentController) {
-        currentController.abort();
-        currentController = null;
+    if (state.currentController) {
+        state.currentController.abort();
+        state.currentController = null;
     }
 }
 
 // Return the chrome to its pre-scan state: Start button, input pane restored,
 // pause hidden. Does not touch results — those survive a stop.
 function resetScanUI() {
-    scanState = 'idle';
-    isPaused = false;
+    state.scanState = 'idle';
+    state.isPaused = false;
     updateStartBtn();
     setScanUI(false);
     document.getElementById('pauseBtn').style.display = 'none';
@@ -189,8 +188,8 @@ function stopScan() {
 }
 
 function togglePause() {
-    isPaused = !isPaused;
-    if (isPaused) {
+    state.isPaused = !state.isPaused;
+    if (state.isPaused) {
         abortInFlight();
         updatePauseBtn();
         log('PAUSED');
@@ -199,13 +198,13 @@ function togglePause() {
 
     updatePauseBtn();
     log('RESUMED');
-    const remaining = allProxies.filter(p => !checkedKeys.has(proxyKey(p)));
+    const remaining = state.allProxies.filter(p => !state.checkedKeys.has(proxyKey(p)));
     if (remaining.length === 0) {
         finish();
         return;
     }
     log(`Resuming with ${remaining.length} unchecked...`);
-    runCheckStream(remaining, globalLinkMap).then(r => {
+    runCheckStream(remaining, state.globalLinkMap).then(r => {
         if (r === 'done' || r === 'timeout') finish();
     }).catch(reportScanFailure);
 }
@@ -214,9 +213,9 @@ async function runCheckStream(proxies, linkMap) {
     if (proxies.length === 0) return 'done';
 
     const controller = new AbortController();
-    currentController = controller;
-    const baseline = checkedKeys.size;
-    const totalOrig = allProxies.length;
+    state.currentController = controller;
+    const baseline = state.checkedKeys.size;
+    const totalOrig = state.allProxies.length;
     const batchSize = getConcurrency();
     const timeoutSec = getTimeout();
     let scanDone = false;
@@ -264,11 +263,11 @@ async function runCheckStream(proxies, linkMap) {
                     updateUI(currentTotal, totalOrig);
 
                     const key = proxyKey(data);
-                    checkedKeys.add(key);
+                    state.checkedKeys.add(key);
 
                     if (data.ok) {
                         const orig = linkMap.get(key) || `tg://proxy?server=${data.server}&port=${data.port}&secret=${data.secret}`;
-                        workingProxies.push({ link: orig, ping: data.ping, server: data.server, port: data.port });
+                        state.workingProxies.push({ link: orig, ping: data.ping, server: data.server, port: data.port });
                         log(`SUCCESS: ${data.server} (${data.ping}ms)`, 'ok');
                         updateOutput();
                     }
@@ -280,11 +279,11 @@ async function runCheckStream(proxies, linkMap) {
     } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-            if (isPaused) return 'paused';
+            if (state.isPaused) return 'paused';
             // stopScan() sets scanState = 'idle' synchronously before this abort rejection's
             // microtask runs, so scanState === 'idle' here means the user stopped the scan
             // (as opposed to the scanTimeout watchdog firing while still 'scanning').
-            return scanState === 'idle' ? 'stopped' : 'timeout';
+            return state.scanState === 'idle' ? 'stopped' : 'timeout';
         }
         throw err;
     }
@@ -297,13 +296,13 @@ async function startCheck() {
 
         if (!input) return showToast(t.toastEmpty, true);
 
-        isPaused = false;
-        currentController = null;
-        checkedKeys = new Set();
-        allProxies = [];
+        state.isPaused = false;
+        state.currentController = null;
+        state.checkedKeys = new Set();
+        state.allProxies = [];
 
         const { proxies: validLinks, skipped, duplicates } = parseProxyList(input);
-        lastSkipped = skipped;
+        state.lastSkipped = skipped;
         if (duplicates > 0) log(`Removed ${duplicates} duplicate entries.`);
 
         if (validLinks.length === 0) {
@@ -312,35 +311,35 @@ async function startCheck() {
             return;
         }
 
-        log(`Parsed ${validLinks.length} valid links. Skipped ${lastSkipped} bad links.`);
+        log(`Parsed ${validLinks.length} valid links. Skipped ${state.lastSkipped} bad links.`);
 
-        workingProxies = [];
+        state.workingProxies = [];
         document.getElementById('outputProxies').value = '';
         scheduleResultsRender();
 
         log(`Settings: concurrency=${getConcurrency()}, timeout=${getTimeout()}s`);
 
-        scanState = 'scanning';
+        state.scanState = 'scanning';
         updateStartBtn();
         updatePauseBtn();
         document.getElementById('pauseBtn').style.display = '';
 
         // Build lookup: "server:port:secret" → original link
-        globalLinkMap = new Map();
+        state.globalLinkMap = new Map();
         for (const p of validLinks) {
-            globalLinkMap.set(proxyKey(p), p.original);
+            state.globalLinkMap.set(proxyKey(p), p.original);
         }
 
-        allProxies = validLinks;
+        state.allProxies = validLinks;
 
         setScanUI(true);
         updateScanSummary();
         updateUI(0, validLinks.length);
 
-        const result = await runCheckStream(allProxies, globalLinkMap);
+        const result = await runCheckStream(state.allProxies, state.globalLinkMap);
         if (result === 'done' || result === 'timeout') {
             if (result === 'timeout') {
-                updateUI(allProxies.length, allProxies.length);
+                updateUI(state.allProxies.length, state.allProxies.length);
             }
             finish();
         }
@@ -350,30 +349,28 @@ async function startCheck() {
     }
 }
 
-let lastChecked = 0, lastTotal = 0;
-
 function updateUI(c, t) {
-    lastChecked = c;
-    lastTotal = t;
+    state.lastChecked = c;
+    state.lastTotal = t;
     const percent = t ? (c / t) * 100 : 0;
     document.getElementById('progressBar').style.width = percent + '%';
     renderStats();
 }
 
+// workingProxies is kept sorted ascending by ping, so the head is the best one.
 function renderStats() {
-    document.getElementById('tileChecked').textContent = lastChecked;
-    document.getElementById('tileTotal').textContent = lastTotal;
-    document.getElementById('tileWorking').textContent = workingProxies.length;
-    document.getElementById('tileBest').textContent =
-        workingProxies.length ? workingProxies[0].ping + ' ms' : '—';
-    document.getElementById('tileFailed').textContent =
-        Math.max(0, lastChecked - workingProxies.length);
-    document.getElementById('tileSkipped').textContent = lastSkipped;
+    renderStatTiles(document, {
+        checked: state.lastChecked,
+        total: state.lastTotal,
+        working: state.workingProxies.length,
+        best: state.workingProxies.length ? state.workingProxies[0].ping : null,
+        skipped: state.lastSkipped,
+    });
 }
 
 function updateOutput() {
-    workingProxies.sort((a, b) => a.ping - b.ping);
-    document.getElementById('outputProxies').value = workingProxies.map(proxyLine).join('\n\n');
+    state.workingProxies.sort((a, b) => a.ping - b.ping);
+    document.getElementById('outputProxies').value = state.workingProxies.map(proxyLine).join('\n\n');
     scheduleResultsRender();
     renderStats();
 }
@@ -384,60 +381,14 @@ function scheduleResultsRender() {
     resultsRenderQueued = true;
     requestAnimationFrame(() => {
         resultsRenderQueued = false;
-        renderResultsTable();
+        renderResultsTable(document, state.workingProxies, translations[currentLang].rowCopy);
     });
-}
-
-// Safe DOM only: server/port come from user-pasted URLs, so text goes in through
-// textContent — never innerHTML here.
-function resultCell(className, content) {
-    const td = document.createElement('td');
-    if (className) td.className = className;
-    if (content instanceof Node) td.appendChild(content);
-    else td.textContent = content;
-    return td;
-}
-
-function renderResultsTable() {
-    const tbody = document.getElementById('resultsBody');
-    const rowCopyLabel = translations[currentLang].rowCopy;
-    const frag = document.createDocumentFragment();
-    workingProxies.forEach((p, i) => {
-        const badge = document.createElement('span');
-        badge.className = 'ping ' + pingClass(p.ping);
-        badge.textContent = p.ping + ' ms';
-
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'rowcopy';
-        btn.dataset.index = i;
-        btn.textContent = rowCopyLabel;
-
-        const tr = document.createElement('tr');
-        tr.append(
-            resultCell('rank', i + 1),
-            resultCell('host', p.server),
-            resultCell('host', p.port),
-            resultCell(null, badge),
-            resultCell(null, btn)
-        );
-        frag.appendChild(tr);
-    });
-    tbody.replaceChildren(frag);
-    document.getElementById('resultsCount').textContent = workingProxies.length;
-    document.getElementById('resultsPanel').classList.toggle('has-results', workingProxies.length > 0);
-}
-
-function setResultsView(view) {
-    document.getElementById('resultsPanel').dataset.view = view;
-    document.getElementById('viewTableBtn').setAttribute('aria-pressed', String(view === 'table'));
-    document.getElementById('viewTextBtn').setAttribute('aria-pressed', String(view === 'text'));
 }
 
 document.getElementById('resultsBody').addEventListener('click', (e) => {
     const btn = e.target.closest('.rowcopy');
     if (!btn) return;
-    const p = workingProxies[Number(btn.dataset.index)];
+    const p = state.workingProxies[Number(btn.dataset.index)];
     if (p) copyText(proxyLine(p));
 });
 
@@ -446,8 +397,8 @@ function finish() {
     resetScanUI();
     log('Process finished.');
 
-    if (workingProxies.length > 0) {
-        showToast(interpolate(t.toastFound, { n: workingProxies.length }));
+    if (state.workingProxies.length > 0) {
+        showToast(interpolate(t.toastFound, { n: state.workingProxies.length }));
         if (document.getElementById('soundCheck').checked) beep();
     } else {
         showToast(t.toastNoWorking, true);
@@ -467,8 +418,8 @@ function copyText(text) {
 
 function copyResults() {
     const t = translations[currentLang];
-    if (workingProxies.length === 0) return showToast(t.toastEmpty, true);
-    copyText(workingProxies.map(proxyLine).join('\n\n'));
+    if (state.workingProxies.length === 0) return showToast(t.toastEmpty, true);
+    copyText(state.workingProxies.map(proxyLine).join('\n\n'));
 }
 
 function fallbackCopy(text) {
@@ -489,10 +440,7 @@ function fallbackCopy(text) {
 }
 
 function showToast(message, isError = false) {
-    const toast = document.getElementById("toast");
-    toast.innerText = message;
-    toast.className = "toast show " + (isError ? "error" : "success");
-    setTimeout(() => { toast.classList.remove("show"); }, 3000);
+    paintToast(document, message, isError);
 }
 
 function beep() {
@@ -591,15 +539,15 @@ function handleFileUpload(event) {
 
 function exportResults(format) {
     const t = translations[currentLang];
-    if (workingProxies.length === 0) return showToast(t.toastEmpty, true);
+    if (state.workingProxies.length === 0) return showToast(t.toastEmpty, true);
 
     let content, filename, type;
     if (format === 'json') {
-        content = JSON.stringify(workingProxies.map(p => ({ link: p.link, ping: p.ping })), null, 2);
+        content = JSON.stringify(state.workingProxies.map(p => ({ link: p.link, ping: p.ping })), null, 2);
         filename = 'proxies.json';
         type = 'application/json';
     } else {
-        content = workingProxies.map(proxyLine).join('\n\n');
+        content = state.workingProxies.map(proxyLine).join('\n\n');
         filename = 'proxies.txt';
         type = 'text/plain';
     }
@@ -635,8 +583,8 @@ document.getElementById('helpBtn').addEventListener('click', openHelp);
 document.getElementById('startBtn').addEventListener('click', handleStartStop);
 document.getElementById('pauseBtn').addEventListener('click', togglePause);
 document.getElementById('fileInput').addEventListener('change', handleFileUpload);
-document.getElementById('viewTableBtn').addEventListener('click', () => setResultsView('table'));
-document.getElementById('viewTextBtn').addEventListener('click', () => setResultsView('text'));
+document.getElementById('viewTableBtn').addEventListener('click', () => applyResultsView(document, 'table'));
+document.getElementById('viewTextBtn').addEventListener('click', () => applyResultsView(document, 'text'));
 document.getElementById('copyBtn').addEventListener('click', copyResults);
 document.getElementById('exportTxtBtn').addEventListener('click', () => exportResults('txt'));
 document.getElementById('exportJsonBtn').addEventListener('click', () => exportResults('json'));
