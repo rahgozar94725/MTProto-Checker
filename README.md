@@ -53,7 +53,7 @@ go build -o mtproto-checker .
     > **Tip:** You can find a huge list of free proxies in [this repository](https://github.com/SoliSpirit/mtproto).
 2.  **Load the List:** Paste into the **"Input List"** box, click **"File"**, or drag a file onto the box.
 3.  **Start Check:** Click the **"Start Check"** button.
-4.  **Wait:** Invalid formats are filtered out first, then connections are tested in batches with live progress.
+4.  **Wait:** Invalid formats are filtered out first, then every proxy is checked concurrently and each result streams back the moment it lands. The four tiles above the input — progress, working, best ping, failed/skipped — update as it goes.
 5.  **Collect Results:** Working proxies appear in the results table, fastest first — copy a single row, click **"Copy Working List"**, or export as TXT/JSON.
 
 ## 🔌 HTTP API
