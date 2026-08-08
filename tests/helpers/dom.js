@@ -37,7 +37,7 @@ let mountCounter = 0;
  * @param {object}   [options.storage]  localStorage entries seeded before app.js boots.
  * @param {Function} [options.fetch]    replaces the default fetch stub, which refuses to dial out.
  * @param {string}   [options.url]      document URL; defaults to the dev server address.
- * @returns {Promise<{window, document, cleanup, flushFrames, recorded}>}
+ * @returns {Promise<{window, document, cleanup, flushFrames, pendingFrames, recorded}>}
  */
 export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://127.0.0.1:3000/' } = {}) {
     const recorded = {
@@ -91,6 +91,13 @@ export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://1
         return id;
     };
     window.cancelAnimationFrame = (id) => { frames.delete(id); };
+
+    // How many callbacks are waiting for the next frame. Coalesced rendering is
+    // only observable through this count: N results in one tick must leave one
+    // queued callback, not N.
+    function pendingFrames() {
+        return frames.size;
+    }
 
     // Drains until quiet, so a frame scheduled from inside a frame still runs.
     function flushFrames() {
@@ -186,5 +193,5 @@ export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://1
         window.close();
     }
 
-    return { window, document: window.document, cleanup, flushFrames, recorded };
+    return { window, document: window.document, cleanup, flushFrames, pendingFrames, recorded };
 }
