@@ -1,0 +1,22 @@
+{
+  "name": "mtproto-checker-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Test harness for the MTProto Checker frontend. The application itself is the Go binary; this package exists only to run tests.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "npm run test:unit",
+    "test:unit": "node --test \"tests/unit/**/*.test.js\"",
+    "test:watch": "node --test --watch \"tests/unit/**/*.test.js\"",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=\"public/js/**\" \"tests/unit/**/*.test.js\"",
+    "test:e2e": "playwright test",
+    "test:all": "npm run test:unit && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "jsdom": "^28.0.0"
+  }
+}

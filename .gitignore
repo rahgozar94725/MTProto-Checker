@@ -16,6 +16,15 @@ filter.sh
 # Durable decisions go in CLAUDE.md instead.
 docs/superpowers/
 .agent-docs/
+tasks/
+
+# JS test harness. Nothing here may live under public/ — //go:embed public
+# would bake it into the release binary.
+node_modules/
+coverage/
+test-results/
+playwright-report/
+.playwright/
 
 # Archives are built outside the repository; this is the backstop.
 *.zip
