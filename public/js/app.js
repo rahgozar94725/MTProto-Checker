@@ -13,11 +13,49 @@ import { createScanState } from './state.js';
 // All mutable scan state lives here; nothing below declares its own.
 const state = createScanState();
 
-let currentTheme = localStorage.getItem('theme') || 'dark';
+// This file is a module, so a throw at top level aborts evaluation and the
+// wiring block never runs -- the page paints normally with every control dead.
+// The prelude's only outside input is localStorage, so both accessors are
+// total. The <head> bootstrap in index.html guards the same reads for the same
+// reason; keep the two in step.
+function readStored(key) {
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;   // storage denied: the defaults stand
+    }
+}
+
+function writeStored(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // Denied or over quota. The preference does not survive the tab, but
+        // losing it must not cost the user the change they just made.
+    }
+}
+
+function removeStored(key) {
+    try {
+        localStorage.removeItem(key);
+    } catch {
+        // Nothing to migrate away from.
+    }
+}
+
+// localStorage is keyed by origin and this app lives on 127.0.0.1:3000, which it
+// shares with every other local dev server. An unrecognised `lang` written by
+// one of them is a matter of time, so resolution is total rather than trusting
+// the stored value to be a key of translations.
+function resolveLang(lang) {
+    return translations[lang] ? lang : 'fa';
+}
+
+let currentTheme = readStored('theme') || 'dark';
 
 function setTheme(theme) {
     currentTheme = theme;
-    localStorage.setItem('theme', theme);
+    writeStored('theme', theme);
     document.documentElement.setAttribute('data-theme', theme);
 }
 
@@ -25,26 +63,31 @@ function toggleTheme() {
     setTheme(currentTheme === 'dark' ? 'light' : 'dark');
 }
 
-let currentLang = localStorage.getItem('lang') || 'fa';
+let currentLang = resolveLang(readStored('lang'));
 
 function setLanguage(lang) {
+    lang = resolveLang(lang);
     currentLang = lang;
-    localStorage.setItem('lang', lang);
-    
+    writeStored('lang', lang);
+
     document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr';
     document.documentElement.lang = lang;
     document.getElementById('langSelect').value = lang;
 
+    // resolveLang() above guarantees this is a real table, which is what keeps
+    // every other translations[currentLang] lookup in this file total too.
+    const table = translations[lang];
+
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        if (translations[lang][key]) {
+        if (table[key]) {
             if (el.id === 'startBtn') return;
-            el.innerText = translations[lang][key];
+            el.innerText = table[key];
         }
     });
 
-    document.getElementById('inputProxies').placeholder = translations[lang].inputPlaceholder;
-    document.getElementById('outputProxies').placeholder = translations[lang].outputPlaceholder;
+    document.getElementById('inputProxies').placeholder = table.inputPlaceholder;
+    document.getElementById('outputProxies').placeholder = table.outputPlaceholder;
 }
 
 function updatePauseBtn() {
@@ -84,10 +127,6 @@ function changeLanguage(lang) {
     scheduleResultsRender();
 }
 
-setLanguage(currentLang);
-setTheme(currentTheme);
-updateStartBtn();
-
 const MAX_LOG_LINES = 200;
 
 // kind: true|'error' → red, 'ok' → green, anything else → plain
@@ -122,26 +161,25 @@ function getTimeout() {
 }
 
 function saveSettings() {
-    localStorage.setItem('concurrency', document.getElementById('concurrencySelect').value);
-    localStorage.setItem('timeout', document.getElementById('timeoutSelect').value);
+    writeStored('concurrency', document.getElementById('concurrencySelect').value);
+    writeStored('timeout', document.getElementById('timeoutSelect').value);
 }
 
 function loadSettings() {
     // Migrate to v3 defaults: timeout=5, concurrency=50
-    if (!localStorage.getItem('settings_v') || localStorage.getItem('settings_v') < '3') {
-        localStorage.removeItem('timeout');
-        localStorage.removeItem('concurrency');
-        localStorage.setItem('settings_v', '3');
+    if (!readStored('settings_v') || readStored('settings_v') < '3') {
+        removeStored('timeout');
+        removeStored('concurrency');
+        writeStored('settings_v', '3');
     }
-    const c = localStorage.getItem('concurrency');
-    const t = localStorage.getItem('timeout');
+    const c = readStored('concurrency');
+    const timeout = readStored('timeout');
     if (c) document.getElementById('concurrencySelect').value = c;
-    if (t) document.getElementById('timeoutSelect').value = t;
+    if (timeout) document.getElementById('timeoutSelect').value = timeout;
 }
 
 document.getElementById('concurrencySelect').addEventListener('change', saveSettings);
 document.getElementById('timeoutSelect').addEventListener('change', saveSettings);
-loadSettings();
 
 function openHelp() {
     const urls = {
@@ -564,10 +602,9 @@ function exportResults(format) {
 
 const soundCheck = document.getElementById('soundCheck');
 if (soundCheck) {
-    if (localStorage.getItem('soundEnabled') === 'true') soundCheck.checked = true;
-    syncSoundUI();
+    if (readStored('soundEnabled') === 'true') soundCheck.checked = true;
     soundCheck.addEventListener('change', () => {
-        localStorage.setItem('soundEnabled', soundCheck.checked);
+        writeStored('soundEnabled', soundCheck.checked);
         syncSoundUI();
     });
 }
@@ -588,3 +625,13 @@ document.getElementById('viewTextBtn').addEventListener('click', () => applyResu
 document.getElementById('copyBtn').addEventListener('click', copyResults);
 document.getElementById('exportTxtBtn').addEventListener('click', () => exportResults('txt'));
 document.getElementById('exportJsonBtn').addEventListener('click', () => exportResults('json'));
+
+// Painting runs last, after every listener above is attached. These walk the
+// DOM and read the translation table, so they are the statements most likely to
+// throw on a surprising document -- and a throw here now costs the first paint,
+// not the entire control surface.
+setLanguage(currentLang);
+setTheme(currentTheme);
+updateStartBtn();
+loadSettings();
+if (soundCheck) syncSoundUI();

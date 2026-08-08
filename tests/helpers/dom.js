@@ -34,12 +34,16 @@ let mountCounter = 0;
  * Mount public/index.html + public/js/app.js in a fresh jsdom window.
  *
  * @param {object}   [options]
- * @param {object}   [options.storage]  localStorage entries seeded before app.js boots.
- * @param {Function} [options.fetch]    replaces the default fetch stub, which refuses to dial out.
- * @param {string}   [options.url]      document URL; defaults to the dev server address.
+ * @param {object}   [options.storage]     localStorage entries seeded before app.js boots.
+ * @param {Function} [options.fetch]       replaces the default fetch stub, which refuses to dial out.
+ * @param {string}   [options.url]         document URL; defaults to the dev server address.
+ * @param {Function} [options.beforeBoot]  called with { window } immediately before app.js is
+ *                                         imported, for anything that has to be wrong *during*
+ *                                         boot rather than after it -- denied storage, a missing
+ *                                         element. Breaking it post-mount tests nothing.
  * @returns {Promise<{window, document, cleanup, flushFrames, pendingFrames, recorded}>}
  */
-export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://127.0.0.1:3000/' } = {}) {
+export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://127.0.0.1:3000/', beforeBoot } = {}) {
     const recorded = {
         alerts: [],
         clipboard: [],
@@ -164,6 +168,13 @@ export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://1
         if (handle && typeof handle.unref === 'function') handle.unref();
         return handle;
     };
+
+    // Runs before the globals are installed, so replacing window.localStorage
+    // here is picked up by the copy below -- app.js reads the bare global, not
+    // window.localStorage. Note jsdom's Storage is a Proxy whose defineProperty
+    // trap silently drops the definition, so patching a single method on it does
+    // nothing; the whole object has to be swapped.
+    if (beforeBoot) beforeBoot({ window });
 
     const savedGlobals = new Map();
     for (const key of GLOBAL_KEYS) {
