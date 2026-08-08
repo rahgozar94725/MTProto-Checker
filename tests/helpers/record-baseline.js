@@ -10,6 +10,11 @@
 // It loads the real public/index.html into jsdom and injects the real frontend
 // script, because the parser is a bare function in a classic script with
 // top-level DOM side effects and cannot be imported.
+//
+// KEPT FOR PROVENANCE ONLY -- it no longer runs. Classic-script injection throws
+// "Cannot use import statement outside a module" as of the i18n extraction, which
+// gave app.js its first import. The golden file it produced is committed and
+// tests/unit/parse.test.js replays it; to re-record, check out ce02714.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
