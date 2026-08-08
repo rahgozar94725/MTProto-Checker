@@ -19,11 +19,29 @@ go vet ./...                      # clean as of last run
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-X main.version=v0.0.0-local" -o /tmp/mtc .
 ```
 
-A host build (`go1.26.4 windows/amd64`) produces a 21,616,640-byte (~20.6 MiB) binary with `public/` baked in.
+Frontend tests (Node ≥ 22, `npm install` first — nothing in production runs on Node):
+
+```bash
+npm test                          # alias for test:unit
+npm run test:unit                 # node:test + jsdom over tests/unit/**/*.test.js
+npm run test:watch                # same, in watch mode
+npm run test:coverage             # adds --experimental-test-coverage over public/js/**
+npm run test:e2e                  # Playwright, boots `go run .` itself
+npm run test:all                  # unit then e2e
+npx playwright install chromium   # one-time, before the first e2e run
+E2E_LIVE=1 npm run test:e2e       # also runs the live smoke test against real Telegram
+```
+
+`node --test` is given a **quoted glob**, not a directory — Node resolves a bare directory as a module and dies with `MODULE_NOT_FOUND`. Coverage is still behind `--experimental-test-coverage` as of Node 26.5.0.
+
+A host build (`go1.26.4 windows/amd64`) produces a 21,828,608-byte (~20.8 MiB) binary with `public/` baked in. Only `public/` is embedded — `package.json`, `node_modules/` and `tests/` sit outside it and never reach the binary; `tests/unit/harness.test.js` is the permanent guard on that.
 
 **Formatting:** `.gitattributes` pins `*.go` (and all text files) to LF in the repository *and* the working copy, so `gofmt -l .` is meaningful on every platform and is expected to be clean. Caveat: a checkout that predates `.gitattributes` may still hold stale CRLF working copies (`git ls-files --eol` shows `w/crlf`), which makes `gofmt -l` flag every Go file on line endings alone — fix with `rm <files> && git checkout -- <files>`, not by re-formatting.
 
-No linter, no formatter config, no test CI. Only CI is `.github/workflows/release.yml`, triggered by `push` of a `v*` tag: cross-compiles 5 platforms (windows/linux/darwin × amd64/arm64, `CGO_ENABLED=0`), injects `-X main.version=<tag>`, uploads to GitHub Releases with a changelog generated from `git log <prev-tag>..<tag>`.
+No linter, no formatter config. Two workflows:
+
+- `.github/workflows/test.yml` — on every `push` and `pull_request`, three jobs: `js` (Node 22, `npm ci`, `npm test`), `go` (`go vet`, `go test ./... -short`, and a `gofmt -l .` gate that has to test the file list itself because `gofmt -l` exits 0 even with offenders), `e2e` (both toolchains, `~/.cache/ms-playwright` cached on `package-lock.json`, report uploaded on failure). `E2E_LIVE` is never set in CI.
+- `.github/workflows/release.yml` — triggered by `push` of a `v*` tag: cross-compiles 5 platforms (windows/linux/darwin × amd64/arm64, `CGO_ENABLED=0`), injects `-X main.version=<tag>`, uploads to GitHub Releases with a changelog generated from `git log <prev-tag>..<tag>`.
 
 ## Architecture
 
@@ -53,26 +71,44 @@ Single-process Go server (`main.go`, ~600 lines) + vanilla-JS frontend embedded 
 
 **Concurrency** comes from the `X-Concurrency` request header, clamped to `[1, maxConcurrency = 50]`, enforced by a buffered-channel semaphore. Note the server's own fallback when the header is absent is `10`, while the UI's default selection is `50`.
 
-**Frontend** (`public/js/script.js`, ~775 lines):
-- `translations` object at the top holds all four locales (fa RTL default, en, ru, zh); DOM text is bound via `[data-i18n]` attributes and applied in `setLanguage()`. Adding UI text means adding the key to **all four** locales. The old `status` key is gone — there is no single status line anymore.
+**Frontend** — seven ES modules under `public/js/`, no bundler and still no build step. `public/index.html` loads exactly one of them, `<script type="module" src="/js/app.js">`; the browser fetches the rest. Module scripts are deferred, so a four-line inline script in `<head>` applies the persisted `data-theme`, `dir` and `lang` before CSS paints — without it a light-theme or LTR user gets a dark/RTL flash.
+
+| Module | Lines | Owns |
+|---|---|---|
+| `app.js` | 590 | Entry point: boot order, all event wiring, scan orchestration (`startCheck`/`runCheckStream`/`finish`), theme/language/settings persistence, drag-and-drop, copy and export |
+| `i18n.js` | 193 | `translations` (all four locales), `t(lang, key)`, `interpolate(str, vars)` |
+| `parse.js` | 80 | `parseLink`, `parseProxyList`, `proxyKey`, `isAcceptedFilename`, `ACCEPTED_EXTENSIONS` — pure, no module-level mutable state |
+| `render.js` | 69 | `resultCell`, `renderResultsTable`, `renderStats`, `setResultsView`, `showToast` — all document-first (`renderResultsTable(doc, proxies, rowCopyLabel)`), reading no module state |
+| `sse.js` | 43 | `createSSEParser()` → `{push(chunk)}`, yielding `{event, data}` frames and buffering a trailing partial |
+| `state.js` | 27 | `createScanState()` — a **factory, not a singleton**, so two mounts in one Node process cannot share state |
+| `format.js` | 17 | `proxyLine`, `pingClass` |
+
+- `i18n.js` holds all four locales (fa RTL default, en, ru, zh); DOM text is bound via `[data-i18n]` attributes and applied in `setLanguage()`. Adding UI text means adding the key to **all four** locales. The old `status` key is gone — there is no single status line anymore.
 - Layout is a single-column flow, not the old two-textarea grid: settings bar → four stat tiles (`#tileChecked`/`#tileTotal`, `#tileWorking`, `#tileBest`, `#tileFailed`/`#tileSkipped`, all written by `renderStats()`) → progress bar → input section → results panel → console drawer.
 - The input section's `.io-pane` holds `#inputProxies` plus an absolutely-positioned `.empty-hint` overlay (icon, localized copy, an example `tg://` link) shown only while the textarea is empty (`:placeholder-shown`). During a scan, `body.scanning` (toggled by `setScanUI()`) hides the pane entirely and shows `#inputSummary` instead — a localized "N links loaded · M skipped" line written by `updateScanSummary()`. Stop restores the pane (`setScanUI(false)`); pause deliberately does not — `togglePause()` never calls `setScanUI()`, so the input stays collapsed through a pause since `scanState` remains `'scanning'`. The server has no notion of this collapse.
-- Results panel: `workingProxies` (`{link, ping, server, port}`) is the sole source of truth, populated from SSE `progress` events in `runCheckStream()`. `renderResultsTable()` — always rebuilt with `createElement`/`textContent`, never `innerHTML`, since server/port are attacker-controlled strings from pasted URLs — is the default view; `#resultsPanel[data-view]` toggles between it and a plain-text `#outputProxies` textarea via the `.view-toggle` Table/Plain-text buttons (`setResultsView()`). Rendering is coalesced through `scheduleResultsRender()` (one `requestAnimationFrame` per burst) rather than re-rendering per SSE event. Per-row copy is wired as **one delegated `click` listener on `#resultsBody`** (`btn.dataset.index` → `workingProxies[i]`), justified by rows being rebuilt wholesale on every render. Action buttons use inline `onclick` in `index.html` (renaming a top-level function silently breaks them); dynamically generated content (`#resultsBody` row copies) and the settings/sound inputs (`#concurrencySelect`, `#timeoutSelect`, `#soundCheck`) use `addEventListener`. All copy/export paths read `workingProxies`, never the DOM, and every artifact preserves the secret-bearing `p.link`; `proxyLine(p)` (`link + ' # Ping: Nms'`) formats the text artifacts — `exportResults('json')` builds `{link, ping}` objects directly instead.
+- Results panel: `workingProxies` (`{link, ping, server, port}`) is the sole source of truth, populated from SSE `progress` events in `runCheckStream()`. `renderResultsTable()` — always rebuilt with `createElement`/`textContent`, never `innerHTML`, since server/port are attacker-controlled strings from pasted URLs — is the default view; `#resultsPanel[data-view]` toggles between it and a plain-text `#outputProxies` textarea via the `.view-toggle` Table/Plain-text buttons (`setResultsView()`). Rendering is coalesced through `scheduleResultsRender()` (one `requestAnimationFrame` per burst) rather than re-rendering per SSE event. Per-row copy is wired as **one delegated `click` listener on `#resultsBody`** (`btn.dataset.index` → `workingProxies[i]`), justified by rows being rebuilt wholesale on every render. All copy/export paths read `workingProxies`, never the DOM, and every artifact preserves the secret-bearing `p.link`; `proxyLine(p)` (`link + ' # Ping: Nms'`) formats the text artifacts — `exportResults('json')` builds `{link, ping}` objects directly instead.
 - Scan lifecycle is two independent flags: `scanState` (`'idle'`/`'scanning'`, drives the start button flipping to a red Stop via `updateStartBtn()`) and `isPaused`. Both pause and stop call `controller.abort()` on the in-flight SSE fetch — pause differs only in that resume re-POSTs `/check-stream` with the proxies missing from the `checkedKeys` Set (keys are `server:port:secret`). The server has no pause concept.
 - `parseLink()` sanitizes client-side before anything is sent: fixes `.&` typos, requires a scheme, rejects ports outside 1–65535, drops spam secrets (>170 chars or containing a long `AAAA…` run). Dedup by `server:port:secret` happens in `startCheck()`.
 - The console (`#console`) now lives inside `<details id="consoleDrawer">` — collapsed by default, auto-opened by `log()` whenever a line is logged with `kind === true || 'error'` (`drawer.open = true`), so scan/parse errors surface without the user having to expand it manually.
-- Handlers are wired as inline `onclick`/`onchange` attributes in `index.html`, not `addEventListener` — renaming a top-level function in `script.js` silently breaks the button unless the HTML is updated too.
+- Every handler is wired with `addEventListener` inside `app.js`; `index.html` carries zero `onclick`/`onchange` attributes and `app.js` leaks no function to `window`. The wiring is by ID, so **renaming or removing an ID in `index.html` silently unwires that control** — `tests/e2e/controls.spec.js` exists to catch exactly that.
 - CSS is split by concern and must stay that way: `tokens.css` (custom properties) → `base.css` (reset/typography) → `components.css`. Theme is `[data-theme]` on `<html>` (default `'dark'`), persisted in `localStorage` alongside language and the finish-sound toggle. The `localStorage` entry only persists the preference — the completion beep fires in `finish()`, and only when the checkbox is currently checked.
 - Two deliberate button systems in `components.css` — do not "unify" them: action buttons (start/pause/stop/copy/export/file) are 48px glassmorphism (`backdrop-filter: blur(8px)`, glass borders/inset shadows) with gradient fills — start blue→indigo, copy/export emerald, pause amber, stop red; header controls (theme/sound/language/help) are a separate flat 34px system. `.rowcopy` and `.view-toggle` are a third thing, table chrome deliberately outside both systems — flat, bordered, no backdrop-filter, sized to sit inside table rows and the results-head toolbar.
 - The `<h1>` title wraps an `<a>` linking to the GitHub repo.
 - Zero CDN at runtime: Vazirmatn (Persian) + Inter (Latin) woff2 are self-hosted under `public/fonts/`.
+
+**Frontend tests** — `node:test` + jsdom for units, Playwright for e2e. No bundler, no transpiler. `SPEC.md` is the contract this suite was built to; the ESM refactor that made it possible is documented there.
+
+- `tests/unit/` — `parse`, `sse`, `format`, `i18n`, `render`/`state` (all at 100% line and branch), plus `lifecycle.test.js` (full scan against a stubbed `fetch`) and `harness.test.js` (asserts nothing test-related sits under `public/`). `app.js` reads ~29% and stays misattributed: `tests/helpers/dom.js` cache-busts each mount with a `?mount=N` specifier, so every mount is a separate module URL to the coverage reporter.
+- `tests/helpers/dom.js` — mounts the **real** `public/index.html` in jsdom, so a renamed ID fails a test. jsdom cannot run `<script type="module">`, so `app.js` is imported by Node with the jsdom window installed on `globalThis` first. **jsdom has no `innerText`** — the helper defines it in terms of `textContent` before importing `app.js`; without that shim every `log()`/`setLanguage()`/`showToast()` write silently vanishes. `requestAnimationFrame` is replaced with a controllable version so coalesced rendering can be flushed deterministically.
+- `tests/fixtures/golden/parse-baseline.json` — the pre-refactor parser's output over `proxies-dirty.txt`, recorded before any edit and replayed by `parse.test.js`. It is **Node-flavoured**: Node's `URL` accepts `file://localhost?server=…` and Chrome does not, so the same fixture is 227 proxies under `npm test` and 226 in a real browser. `tests/helpers/record-baseline.js` is kept for provenance only — it injects the frontend as a classic script and stopped working the moment `app.js` gained its first `import`.
+- `tests/e2e/` — `scan.spec.js` (stubbed `/check-stream` via `page.route()`), `controls.spec.js` (all eleven migrated controls, zero console errors), `live.spec.js` (skipped unless `E2E_LIVE=1`; the only test that would catch a real server-contract break). Playwright boots the server itself with `NO_BROWSER=1`; the `webServer` timeout is 180s because `go run .` compiles first.
 
 ## Repo conventions
 
 - Commits follow Conventional Commits: `feat`/`fix`/`chore`/`build`/`refactor`, optional scope — `feat(i18n):`, `fix(release):`, `refactor(frontend):`.
 - Trailer convention: Claude-assisted commits carry `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` (plus a human co-author trailer when someone else's work is being landed); hand-made commits carry none. The mixed history is deliberate attribution, not drift — don't add or strip trailers retroactively.
 - Contributions from forks must be rebased onto current `main` or cherry-picked — never merged with the GitHub merge button. Older forks carry a divergent history.
-- Key files: `main.go` (server, all handlers) · `public/index.html` (markup + inline handlers) · `public/js/script.js` (all frontend logic + i18n) · `public/css/{tokens,base,components}.css` (load order matters) · `main_test.go` + `proxytest_test.go` (Go tests) · `.github/workflows/release.yml` (only CI).
+- Key files: `main.go` (server, all handlers) · `public/index.html` (markup, `<head>` paint bootstrap, no inline handlers) · `public/js/app.js` (entry point) + `{i18n,parse,render,sse,state,format}.js` · `public/css/{tokens,base,components}.css` (load order matters) · `main_test.go` + `proxytest_test.go` (Go tests) · `package.json` + `tests/` + `playwright.config.js` (JS tests) · `SPEC.md` (the frontend-test contract) · `.github/workflows/{test,release}.yml`.
 - Four READMEs (`README.md`, `_FA`, `_RU`, `_ZH`) are intended to be kept in sync — not verified, and they already differ in length (`README_FA.md` is 77 lines against 85 for the other three). The in-app Help button opens the one matching the current UI language.
 
 ## Known drift and defects (current state — do not "fix" as a side effect)
@@ -80,9 +116,10 @@ Single-process Go server (`main.go`, ~600 lines) + vanilla-JS frontend embedded 
 The READMEs describe intent, and parts have drifted from the code. Verify against source before trusting them. Confirmed by reading the code:
 
 - **No auth, no CORS policy, no origin check.** The server binds `127.0.0.1:3000` by default (`resolveAddr`); setting `HOST=0.0.0.0` (or a specific address) is the explicit opt-in to wider exposure, and anyone routable can then drive the checker. `PORT` parsing is deliberately lenient (Sscanf error ignored) — preserved behavior, not endorsed design.
-- **The production link parser has zero test coverage.** `main_test.go` defines and tests its own local `parseProxyLink` helper; the parser that actually runs is `parseLink` in `public/js/script.js`, and there is no JS test harness in the repo.
-- **Tests depend on a proxy list that is not in the repo.** `main_test.go` and `proxytest_test.go` read `testdata/proxies.txt` and `t.Skip` when it is absent, so `go test ./...` is largely a no-op on a fresh clone.
-- **No HTTP handler tests.** No test uses `httptest`; `/check`, `/check-batch`, `/check-stream` and `recoverMiddleware` have zero coverage. `checkProxy` is exercised only by a live-network test that skips when the local proxy list is absent.
+- **`main_test.go` still tests a parser nobody runs.** It defines and tests its own local `parseProxyLink` helper. The parser that actually runs is `parseLink` in `public/js/parse.js` — now covered at 100% line and branch by `tests/unit/parse.test.js` plus the golden replay, so the coverage gap is closed, but the duplicated Go helper remains and can drift from the JS one without any test noticing.
+- **The Go tests depend on a proxy list that is not in the repo.** `main_test.go` and `proxytest_test.go` read `testdata/proxies.txt` and `t.Skip` when it is absent, so `go test ./...` is largely a no-op on a fresh clone. The JS suites have no such dependency — they run from a synthetic fixture.
+- **No Go HTTP handler tests.** No Go test uses `httptest`; `/check`, `/check-batch` and `recoverMiddleware` have zero coverage. `checkProxy` is exercised only by a live-network test that skips when the local proxy list is absent. `/check-stream` is the exception, and only from the outside: the Playwright specs drive the real server, though `scan.spec.js` intercepts the endpoint and only the `E2E_LIVE` smoke test lets a request through to it.
+- **The activity-log drawer opens by itself during a scan**, even with nothing logged as an error. Chrome auto-expands a closed `<details>` when script scrolls a descendant, and `log()` has always ended with `c.scrollTop = c.scrollHeight`. Predates the ESM refactor — present on `main` too.
 - **`images/screenshot*.png` are stale again** after the results-workbench restructure (stat tiles, collapsing input zone, table/plain-text results panel, console drawer) — they still show the old status-line/two-textarea layout.
 
 Every item above is documentation of current state. Fixes go through brainstorming → plan first, not opportunistic edits.
