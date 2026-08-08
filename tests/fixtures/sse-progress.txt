@@ -1,0 +1,18 @@
+event: progress
+data: {"completed":0,"total":4,"working":0,"server":"","port":0,"secret":"","ok":false}
+
+event: progress
+data: {"completed":1,"total":4,"working":0,"server":"192.0.2.11","port":8443,"secret":"ee2b3c4d5e6f708192a3b4c5d6e7f809","ok":false}
+
+event: progress
+data: {"completed":2,"total":4,"working":1,"server":"192.0.2.13","port":443,"secret":"ee4d5e6f708192a3b4c5d6e7f8091a2b","ok":true,"ping":480}
+
+event: progress
+data: {"completed":3,"total":4,"working":2,"server":"192.0.2.10","port":443,"secret":"ee1a2b3c4d5e6f708192a3b4c5d6e7f8","ok":true,"ping":120}
+
+event: progress
+data: {"completed":4,"total":4,"working":3,"server":"192.0.2.12","port":443,"secret":"dd3c4d5e6f708192a3b4c5d6e7f8091a","ok":true,"ping":240}
+
+event: done
+data: {"working":3,"total":4}
+
