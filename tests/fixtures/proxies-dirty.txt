@@ -1,0 +1,311 @@
+# Synthetic proxy list for parser tests. Every address is from 192.0.2.0/24
+# (RFC 5737 documentation range) so nothing here can resolve to a real host.
+# Lines starting with # have no "://" and are themselves no-scheme test cases.
+#
+# --- valid tg:// links, hex secrets ---
+tg://proxy?server=192.0.2.1&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8
+tg://proxy?server=192.0.2.2&port=443&secret=dd1a2b3c4d5e6f708192a3b4c5d6e7f8
+tg://proxy?server=192.0.2.3&port=8443&secret=7g8SNBVWeJisNO3q8VZ4mHM
+tg://proxy?server=192.0.2.4&port=80&secret=ee0011223344556677889900aabbccdd
+tg://proxy?server=192.0.2.5&port=8080&secret=ee0011223344556677889900aabbccde
+# --- valid, fake-TLS style secret with a hostname suffix ---
+tg://proxy?server=192.0.2.6&port=443&secret=eeaabbccddeeff00112233445566778877772e6d6963726f736f66742e636f6d
+tg://proxy?server=192.0.2.7&port=443&secret=eeaabbccddeeff00112233445566778877772e676f6f676c652e636f6d
+# --- valid, base64 secrets in all four alphabets ---
+tg://proxy?server=192.0.2.8&port=443&secret=7gABAgMEBQYHCAkKCwwNDg8
+tg://proxy?server=192.0.2.9&port=443&secret=7gABAgMEBQYHCAkKCwwNDg8=
+tg://proxy?server=192.0.2.10&port=443&secret=7g-_AgMEBQYHCAkKCwwNDg8
+tg://proxy?server=192.0.2.11&port=443&secret=7g+/AgMEBQYHCAkKCwwNDg8=
+# --- valid https://t.me/proxy form ---
+https://t.me/proxy?server=192.0.2.12&port=443&secret=ee1122334455667788990011223344ff
+https://t.me/proxy?server=192.0.2.13&port=443&secret=ee1122334455667788990011223344fe
+http://t.me/proxy?server=192.0.2.14&port=443&secret=ee1122334455667788990011223344fd
+https://t.me/proxy/?server=192.0.2.15&port=443&secret=ee1122334455667788990011223344fc
+# --- unusual but currently accepted: any scheme with :// and the three params ---
+# these pin current behaviour, they are not an endorsement of it
+socks5://192.0.2.16?server=192.0.2.16&port=1080&secret=ee1122334455667788990011223344fb
+javascript://x?server=192.0.2.17&port=443&secret=ee1122334455667788990011223344fa
+file://localhost?server=192.0.2.18&port=443&secret=ee1122334455667788990011223344f9
+# --- param order shuffled, extra params present ---
+tg://proxy?secret=ee1122334455667788990011223344f8&port=443&server=192.0.2.19
+tg://proxy?server=192.0.2.20&port=443&secret=ee1122334455667788990011223344f7&utm_source=channel
+tg://proxy?server=192.0.2.21&port=443&secret=ee1122334455667788990011223344f6&comment=fast
+# --- the .& typo, which the parser repairs (first occurrence only) ---
+tg://proxy?server=192.0.2.22.&port=443&secret=ee1122334455667788990011223344f5
+tg://proxy?server=192.0.2.23.&port=443.&secret=ee1122334455667788990011223344f4
+tg://proxy?server=192.0.2.24&port=443.&secret=ee1122334455667788990011223344f3
+# --- leading and trailing whitespace, tabs ---
+   tg://proxy?server=192.0.2.25&port=443&secret=ee1122334455667788990011223344f2
+tg://proxy?server=192.0.2.26&port=443&secret=ee1122334455667788990011223344f1
+	tg://proxy?server=192.0.2.27&port=443&secret=ee1122334455667788990011223344f0
+# --- hostile values that must survive as inert text ---
+tg://proxy?server=<script>alert(1)</script>&port=443&secret=ee1122334455667788990011223344ef
+tg://proxy?server=" onerror="alert(1)&port=443&secret=ee1122334455667788990011223344ee
+tg://proxy?server=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E&port=443&secret=ee1122334455667788990011223344ed
+tg://proxy?server=javascript:alert(1)&port=443&secret=ee1122334455667788990011223344ec
+tg://proxy?server=192.0.2.28&port=443&secret=ee11223344556677889900112233'44eb
+# --- unicode and punycode hosts ---
+tg://proxy?server=пример.рф&port=443&secret=ee1122334455667788990011223344ea
+tg://proxy?server=xn--e1afmkfd.xn--p1ai&port=443&secret=ee1122334455667788990011223344e9
+tg://proxy?server=例え.テスト&port=443&secret=ee1122334455667788990011223344e8
+# --- IPv6 literal in the server param ---
+tg://proxy?server=[2001:db8::1]&port=443&secret=ee1122334455667788990011223344e7
+tg://proxy?server=2001:db8::2&port=443&secret=ee1122334455667788990011223344e6
+#
+# ============ REJECTED: no scheme ============
+192.0.2.30:443:ee1122334455667788990011223344e5
+proxy?server=192.0.2.31&port=443&secret=ee1122334455667788990011223344e4
+tg:proxy?server=192.0.2.32&port=443&secret=ee1122334455667788990011223344e3
+t.me/proxy?server=192.0.2.33&port=443&secret=ee1122334455667788990011223344e2
+just some prose that ended up in the list
+--------------------------------
+✅ Working proxies below:
+@some_channel_name
+1234567890
+# ============ REJECTED: missing a required param ============
+tg://proxy?port=443&secret=ee1122334455667788990011223344e1
+tg://proxy?server=192.0.2.34&secret=ee1122334455667788990011223344e0
+tg://proxy?server=192.0.2.35&port=443
+tg://proxy?server=&port=443&secret=ee1122334455667788990011223344df
+tg://proxy?server=192.0.2.36&port=&secret=ee1122334455667788990011223344de
+tg://proxy?server=192.0.2.37&port=443&secret=
+tg://proxy
+tg://proxy?
+# ============ REJECTED: unparseable port ============
+tg://proxy?server=192.0.2.38&port=abc&secret=ee1122334455667788990011223344dd
+tg://proxy?server=192.0.2.39&port=four-four-three&secret=ee1122334455667788990011223344dc
+tg://proxy?server=192.0.2.40&port=+&secret=ee1122334455667788990011223344db
+tg://proxy?server=192.0.2.41&port=NaN&secret=ee1122334455667788990011223344da
+# ============ port boundaries ============
+# 0 and -1 and 65536 and 70000 are rejected; 1 and 65535 are kept
+tg://proxy?server=192.0.2.42&port=0&secret=ee1122334455667788990011223344d9
+tg://proxy?server=192.0.2.43&port=-1&secret=ee1122334455667788990011223344d8
+tg://proxy?server=192.0.2.44&port=1&secret=ee1122334455667788990011223344d7
+tg://proxy?server=192.0.2.45&port=65535&secret=ee1122334455667788990011223344d6
+tg://proxy?server=192.0.2.46&port=65536&secret=ee1122334455667788990011223344d5
+tg://proxy?server=192.0.2.47&port=70000&secret=ee1122334455667788990011223344d4
+tg://proxy?server=192.0.2.48&port=99999999&secret=ee1122334455667788990011223344d3
+# currently accepted: parseInt stops at the first non-digit
+tg://proxy?server=192.0.2.49&port=443abc&secret=ee1122334455667788990011223344d2
+tg://proxy?server=192.0.2.50&port=443.9&secret=ee1122334455667788990011223344d1
+tg://proxy?server=192.0.2.51&port=+443&secret=ee1122334455667788990011223344d0
+tg://proxy?server=192.0.2.52&port=%20443&secret=ee1122334455667788990011223344cf
+# ============ SKIPPED as spam: secret longer than 170 chars ============
+tg://proxy?server=192.0.2.60&port=443&secret=ee11223344556677889900112233445566778899001122334455667788990011223344556677889900112233445566778899001122334455667788990011223344556677889900112233445566778899001122334455
+tg://proxy?server=192.0.2.61&port=443&secret=ff11223344556677889900112233445566778899001122334455667788990011223344556677889900112233445566778899001122334455667788990011223344556677889900112233445566778899001122334455ab
+# ============ SKIPPED as spam: a long AAAA run in the secret ============
+tg://proxy?server=192.0.2.62&port=443&secret=eeAAAAAAAAAAAAAAAAAAAA112233
+tg://proxy?server=192.0.2.63&port=443&secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAA
+tg://proxy?server=192.0.2.64&port=443&secret=ee1122AAAAAAAAAAAAAAAAAAAA334455667788
+# a 19-A run is one short of the trigger and stays valid
+tg://proxy?server=192.0.2.65&port=443&secret=eeAAAAAAAAAAAAAAAAAAA112233
+# ============ spam check runs AFTER the port check ============
+# bad port wins, so this counts as rejected rather than skipped
+tg://proxy?server=192.0.2.66&port=0&secret=eeAAAAAAAAAAAAAAAAAAAA112233
+tg://proxy?server=192.0.2.67&port=99999&secret=eeAAAAAAAAAAAAAAAAAAAA112233
+# ============ duplicates: same server:port:secret ============
+tg://proxy?server=192.0.2.1&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8
+tg://proxy?server=192.0.2.1&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8
+https://t.me/proxy?server=192.0.2.1&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8
+tg://proxy?server=192.0.2.2&port=443&secret=dd1a2b3c4d5e6f708192a3b4c5d6e7f8
+   tg://proxy?server=192.0.2.3&port=8443&secret=7g8SNBVWeJisNO3q8VZ4mHM
+# --- not duplicates: one field differs each time ---
+tg://proxy?server=192.0.2.1&port=444&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8
+tg://proxy?server=192.0.2.70&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8
+tg://proxy?server=192.0.2.1&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f9
+
+# ============ blank lines above and below on purpose ============
+
+# ============ bulk valid entries ============
+tg://proxy?server=192.0.2.100&port=443&secret=ee000000000000000000000000000064
+tg://proxy?server=192.0.2.101&port=443&secret=ee000000000000000000000000000065
+tg://proxy?server=192.0.2.102&port=443&secret=ee000000000000000000000000000066
+tg://proxy?server=192.0.2.103&port=443&secret=ee000000000000000000000000000067
+tg://proxy?server=192.0.2.104&port=443&secret=ee000000000000000000000000000068
+tg://proxy?server=192.0.2.105&port=443&secret=ee000000000000000000000000000069
+tg://proxy?server=192.0.2.106&port=443&secret=ee00000000000000000000000000006a
+tg://proxy?server=192.0.2.107&port=443&secret=ee00000000000000000000000000006b
+tg://proxy?server=192.0.2.108&port=443&secret=ee00000000000000000000000000006c
+tg://proxy?server=192.0.2.109&port=443&secret=ee00000000000000000000000000006d
+tg://proxy?server=192.0.2.110&port=8443&secret=ee00000000000000000000000000006e
+tg://proxy?server=192.0.2.111&port=8443&secret=ee00000000000000000000000000006f
+tg://proxy?server=192.0.2.112&port=8443&secret=ee000000000000000000000000000070
+tg://proxy?server=192.0.2.113&port=8443&secret=ee000000000000000000000000000071
+tg://proxy?server=192.0.2.114&port=8443&secret=ee000000000000000000000000000072
+tg://proxy?server=192.0.2.115&port=8443&secret=ee000000000000000000000000000073
+tg://proxy?server=192.0.2.116&port=8443&secret=ee000000000000000000000000000074
+tg://proxy?server=192.0.2.117&port=8443&secret=ee000000000000000000000000000075
+tg://proxy?server=192.0.2.118&port=8443&secret=ee000000000000000000000000000076
+tg://proxy?server=192.0.2.119&port=8443&secret=ee000000000000000000000000000077
+tg://proxy?server=192.0.2.120&port=80&secret=ee000000000000000000000000000078
+tg://proxy?server=192.0.2.121&port=80&secret=ee000000000000000000000000000079
+tg://proxy?server=192.0.2.122&port=80&secret=ee00000000000000000000000000007a
+tg://proxy?server=192.0.2.123&port=80&secret=ee00000000000000000000000000007b
+tg://proxy?server=192.0.2.124&port=80&secret=ee00000000000000000000000000007c
+tg://proxy?server=192.0.2.125&port=80&secret=ee00000000000000000000000000007d
+tg://proxy?server=192.0.2.126&port=80&secret=ee00000000000000000000000000007e
+tg://proxy?server=192.0.2.127&port=80&secret=ee00000000000000000000000000007f
+tg://proxy?server=192.0.2.128&port=80&secret=ee000000000000000000000000000080
+tg://proxy?server=192.0.2.129&port=80&secret=ee000000000000000000000000000081
+tg://proxy?server=192.0.2.130&port=2053&secret=ee000000000000000000000000000082
+tg://proxy?server=192.0.2.131&port=2053&secret=ee000000000000000000000000000083
+tg://proxy?server=192.0.2.132&port=2053&secret=ee000000000000000000000000000084
+tg://proxy?server=192.0.2.133&port=2053&secret=ee000000000000000000000000000085
+tg://proxy?server=192.0.2.134&port=2053&secret=ee000000000000000000000000000086
+tg://proxy?server=192.0.2.135&port=2053&secret=ee000000000000000000000000000087
+tg://proxy?server=192.0.2.136&port=2053&secret=ee000000000000000000000000000088
+tg://proxy?server=192.0.2.137&port=2053&secret=ee000000000000000000000000000089
+tg://proxy?server=192.0.2.138&port=2053&secret=ee00000000000000000000000000008a
+tg://proxy?server=192.0.2.139&port=2053&secret=ee00000000000000000000000000008b
+https://t.me/proxy?server=192.0.2.140&port=443&secret=ee00000000000000000000000000008c
+https://t.me/proxy?server=192.0.2.141&port=443&secret=ee00000000000000000000000000008d
+https://t.me/proxy?server=192.0.2.142&port=443&secret=ee00000000000000000000000000008e
+https://t.me/proxy?server=192.0.2.143&port=443&secret=ee00000000000000000000000000008f
+https://t.me/proxy?server=192.0.2.144&port=443&secret=ee000000000000000000000000000090
+https://t.me/proxy?server=192.0.2.145&port=443&secret=ee000000000000000000000000000091
+https://t.me/proxy?server=192.0.2.146&port=443&secret=ee000000000000000000000000000092
+https://t.me/proxy?server=192.0.2.147&port=443&secret=ee000000000000000000000000000093
+https://t.me/proxy?server=192.0.2.148&port=443&secret=ee000000000000000000000000000094
+https://t.me/proxy?server=192.0.2.149&port=443&secret=ee000000000000000000000000000095
+tg://proxy?server=192.0.2.150&port=443&secret=7gAAAAECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.151&port=443&secret=7gABAQECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.152&port=443&secret=7gACAQECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.153&port=443&secret=7gADAQECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.154&port=443&secret=7gAEAQECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.155&port=443&secret=7gAFAQECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.156&port=443&secret=7gAGAQECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.157&port=443&secret=7gAHAQECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.158&port=443&secret=7gAIAQECAwQFBgcICQoLDA0
+tg://proxy?server=192.0.2.159&port=443&secret=7gAJAQECAwQFBgcICQoLDA0
+tg://proxy?server=proxy160.example.net&port=443&secret=ee0000000000000000000000000000a0
+tg://proxy?server=proxy161.example.net&port=443&secret=ee0000000000000000000000000000a1
+tg://proxy?server=proxy162.example.net&port=443&secret=ee0000000000000000000000000000a2
+tg://proxy?server=proxy163.example.net&port=443&secret=ee0000000000000000000000000000a3
+tg://proxy?server=proxy164.example.net&port=443&secret=ee0000000000000000000000000000a4
+tg://proxy?server=proxy165.example.net&port=443&secret=ee0000000000000000000000000000a5
+tg://proxy?server=proxy166.example.net&port=443&secret=ee0000000000000000000000000000a6
+tg://proxy?server=proxy167.example.net&port=443&secret=ee0000000000000000000000000000a7
+tg://proxy?server=proxy168.example.net&port=443&secret=ee0000000000000000000000000000a8
+tg://proxy?server=proxy169.example.net&port=443&secret=ee0000000000000000000000000000a9
+tg://proxy?server=192.0.2.170&port=443&secret=ee0000000000000000000000000000aa
+tg://proxy?server=192.0.2.171&port=443&secret=ee0000000000000000000000000000ab
+tg://proxy?server=192.0.2.172&port=443&secret=ee0000000000000000000000000000ac
+tg://proxy?server=192.0.2.173&port=443&secret=ee0000000000000000000000000000ad
+tg://proxy?server=192.0.2.174&port=443&secret=ee0000000000000000000000000000ae
+tg://proxy?server=192.0.2.175&port=443&secret=ee0000000000000000000000000000af
+tg://proxy?server=192.0.2.176&port=443&secret=ee0000000000000000000000000000b0
+tg://proxy?server=192.0.2.177&port=443&secret=ee0000000000000000000000000000b1
+tg://proxy?server=192.0.2.178&port=443&secret=ee0000000000000000000000000000b2
+tg://proxy?server=192.0.2.179&port=443&secret=ee0000000000000000000000000000b3
+tg://proxy?server=192.0.2.180&port=443&secret=ee0000000000000000000000000000b4
+tg://proxy?server=192.0.2.181&port=443&secret=ee0000000000000000000000000000b5
+tg://proxy?server=192.0.2.182&port=443&secret=ee0000000000000000000000000000b6
+tg://proxy?server=192.0.2.183&port=443&secret=ee0000000000000000000000000000b7
+tg://proxy?server=192.0.2.184&port=443&secret=ee0000000000000000000000000000b8
+tg://proxy?server=192.0.2.185&port=443&secret=ee0000000000000000000000000000b9
+tg://proxy?server=192.0.2.186&port=443&secret=ee0000000000000000000000000000ba
+tg://proxy?server=192.0.2.187&port=443&secret=ee0000000000000000000000000000bb
+tg://proxy?server=192.0.2.188&port=443&secret=ee0000000000000000000000000000bc
+tg://proxy?server=192.0.2.189&port=443&secret=ee0000000000000000000000000000bd
+tg://proxy?server=192.0.2.190&port=443&secret=ee0000000000000000000000000000be
+tg://proxy?server=192.0.2.191&port=443&secret=ee0000000000000000000000000000bf
+tg://proxy?server=192.0.2.192&port=443&secret=ee0000000000000000000000000000c0
+tg://proxy?server=192.0.2.193&port=443&secret=ee0000000000000000000000000000c1
+tg://proxy?server=192.0.2.194&port=443&secret=ee0000000000000000000000000000c2
+tg://proxy?server=192.0.2.195&port=443&secret=ee0000000000000000000000000000c3
+tg://proxy?server=192.0.2.196&port=443&secret=ee0000000000000000000000000000c4
+tg://proxy?server=192.0.2.197&port=443&secret=ee0000000000000000000000000000c5
+tg://proxy?server=192.0.2.198&port=443&secret=ee0000000000000000000000000000c6
+tg://proxy?server=192.0.2.199&port=443&secret=ee0000000000000000000000000000c7
+tg://proxy?server=192.0.2.200&port=443&secret=ee0000000000000000000000000000c8
+tg://proxy?server=192.0.2.201&port=443&secret=ee0000000000000000000000000000c9
+tg://proxy?server=192.0.2.202&port=443&secret=ee0000000000000000000000000000ca
+tg://proxy?server=192.0.2.203&port=443&secret=ee0000000000000000000000000000cb
+tg://proxy?server=192.0.2.204&port=443&secret=ee0000000000000000000000000000cc
+tg://proxy?server=192.0.2.205&port=443&secret=ee0000000000000000000000000000cd
+tg://proxy?server=192.0.2.206&port=443&secret=ee0000000000000000000000000000ce
+tg://proxy?server=192.0.2.207&port=443&secret=ee0000000000000000000000000000cf
+tg://proxy?server=192.0.2.208&port=443&secret=ee0000000000000000000000000000d0
+tg://proxy?server=192.0.2.209&port=443&secret=ee0000000000000000000000000000d1
+tg://proxy?server=192.0.2.210&port=443&secret=ee0000000000000000000000000000d2
+tg://proxy?server=192.0.2.211&port=443&secret=ee0000000000000000000000000000d3
+tg://proxy?server=192.0.2.212&port=443&secret=ee0000000000000000000000000000d4
+tg://proxy?server=192.0.2.213&port=443&secret=ee0000000000000000000000000000d5
+tg://proxy?server=192.0.2.214&port=443&secret=ee0000000000000000000000000000d6
+tg://proxy?server=192.0.2.215&port=443&secret=ee0000000000000000000000000000d7
+tg://proxy?server=192.0.2.216&port=443&secret=ee0000000000000000000000000000d8
+tg://proxy?server=192.0.2.217&port=443&secret=ee0000000000000000000000000000d9
+tg://proxy?server=192.0.2.218&port=443&secret=ee0000000000000000000000000000da
+tg://proxy?server=192.0.2.219&port=443&secret=ee0000000000000000000000000000db
+tg://proxy?server=192.0.2.220&port=443&secret=ee0000000000000000000000000000dc
+tg://proxy?server=192.0.2.221&port=443&secret=ee0000000000000000000000000000dd
+tg://proxy?server=192.0.2.222&port=443&secret=ee0000000000000000000000000000de
+tg://proxy?server=192.0.2.223&port=443&secret=ee0000000000000000000000000000df
+tg://proxy?server=192.0.2.224&port=443&secret=ee0000000000000000000000000000e0
+tg://proxy?server=192.0.2.225&port=443&secret=ee0000000000000000000000000000e1
+tg://proxy?server=192.0.2.226&port=443&secret=ee0000000000000000000000000000e2
+tg://proxy?server=192.0.2.227&port=443&secret=ee0000000000000000000000000000e3
+tg://proxy?server=192.0.2.228&port=443&secret=ee0000000000000000000000000000e4
+tg://proxy?server=192.0.2.229&port=443&secret=ee0000000000000000000000000000e5
+tg://proxy?server=192.0.2.230&port=443&secret=ee0000000000000000000000000000e6
+tg://proxy?server=192.0.2.231&port=443&secret=ee0000000000000000000000000000e7
+tg://proxy?server=192.0.2.232&port=443&secret=ee0000000000000000000000000000e8
+tg://proxy?server=192.0.2.233&port=443&secret=ee0000000000000000000000000000e9
+tg://proxy?server=192.0.2.234&port=443&secret=ee0000000000000000000000000000ea
+tg://proxy?server=192.0.2.235&port=443&secret=ee0000000000000000000000000000eb
+tg://proxy?server=192.0.2.236&port=443&secret=ee0000000000000000000000000000ec
+tg://proxy?server=192.0.2.237&port=443&secret=ee0000000000000000000000000000ed
+tg://proxy?server=192.0.2.238&port=443&secret=ee0000000000000000000000000000ee
+tg://proxy?server=192.0.2.239&port=443&secret=ee0000000000000000000000000000ef
+tg://proxy?server=192.0.2.240&port=443&secret=ee0000000000000000000000000000f0
+tg://proxy?server=192.0.2.241&port=443&secret=ee0000000000000000000000000000f1
+tg://proxy?server=192.0.2.242&port=443&secret=ee0000000000000000000000000000f2
+tg://proxy?server=192.0.2.243&port=443&secret=ee0000000000000000000000000000f3
+tg://proxy?server=192.0.2.244&port=443&secret=ee0000000000000000000000000000f4
+tg://proxy?server=192.0.2.245&port=443&secret=ee0000000000000000000000000000f5
+tg://proxy?server=192.0.2.246&port=443&secret=ee0000000000000000000000000000f6
+tg://proxy?server=192.0.2.247&port=443&secret=ee0000000000000000000000000000f7
+tg://proxy?server=192.0.2.248&port=443&secret=ee0000000000000000000000000000f8
+tg://proxy?server=192.0.2.249&port=443&secret=ee0000000000000000000000000000f9
+tg://proxy?server=192.0.2.250&port=443&secret=ee0000000000000000000000000000fa
+tg://proxy?server=192.0.2.251&port=443&secret=ee0000000000000000000000000000fb
+tg://proxy?server=192.0.2.252&port=443&secret=ee0000000000000000000000000000fc
+tg://proxy?server=192.0.2.253&port=443&secret=ee0000000000000000000000000000fd
+tg://proxy?server=192.0.2.254&port=443&secret=ee0000000000000000000000000000fe
+# ============ more duplicate pressure, interleaved with fresh entries ============
+tg://proxy?server=192.0.2.100&port=443&secret=ee000000000000000000000000000064
+tg://proxy?server=192.0.2.150&port=443&secret=7gAAAAECAwQFBgcICQoLDA0
+tg://proxy?server=proxy160.example.net&port=443&secret=ee0000000000000000000000000000a0
+tg://proxy?server=192.0.2.254&port=443&secret=ee0000000000000000000000000000fe
+https://t.me/proxy?server=192.0.2.140&port=443&secret=ee00000000000000000000000000008c
+tg://proxy?server=198.51.100.1&port=443&secret=ee1000000000000000000000000000a0
+tg://proxy?server=198.51.100.2&port=443&secret=ee1000000000000000000000000000a1
+tg://proxy?server=198.51.100.3&port=443&secret=ee1000000000000000000000000000a2
+tg://proxy?server=198.51.100.4&port=443&secret=ee1000000000000000000000000000a3
+tg://proxy?server=198.51.100.5&port=443&secret=ee1000000000000000000000000000a4
+tg://proxy?server=198.51.100.6&port=2053&secret=ee1000000000000000000000000000a5
+tg://proxy?server=198.51.100.7&port=2053&secret=ee1000000000000000000000000000a6
+tg://proxy?server=198.51.100.8&port=2053&secret=ee1000000000000000000000000000a7
+tg://proxy?server=198.51.100.9&port=2053&secret=ee1000000000000000000000000000a8
+tg://proxy?server=198.51.100.10&port=2053&secret=ee1000000000000000000000000000a9
+tg://proxy?server=198.51.100.11&port=8443&secret=ee1000000000000000000000000000aa
+tg://proxy?server=198.51.100.12&port=8443&secret=ee1000000000000000000000000000ab
+tg://proxy?server=198.51.100.13&port=8443&secret=ee1000000000000000000000000000ac
+tg://proxy?server=198.51.100.14&port=8443&secret=ee1000000000000000000000000000ad
+tg://proxy?server=198.51.100.15&port=8443&secret=ee1000000000000000000000000000ae
+tg://proxy?server=203.0.113.1&port=443&secret=ee2000000000000000000000000000b0
+tg://proxy?server=203.0.113.2&port=443&secret=ee2000000000000000000000000000b1
+tg://proxy?server=203.0.113.3&port=443&secret=ee2000000000000000000000000000b2
+tg://proxy?server=203.0.113.4&port=443&secret=ee2000000000000000000000000000b3
+tg://proxy?server=203.0.113.5&port=443&secret=ee2000000000000000000000000000b4
+tg://proxy?server=203.0.113.6&port=80&secret=ee2000000000000000000000000000b5
+tg://proxy?server=203.0.113.7&port=80&secret=ee2000000000000000000000000000b6
+tg://proxy?server=203.0.113.8&port=80&secret=ee2000000000000000000000000000b7
+tg://proxy?server=203.0.113.9&port=80&secret=ee2000000000000000000000000000b8
+tg://proxy?server=203.0.113.10&port=80&secret=ee2000000000000000000000000000b9
+# ============ trailing junk lines, no scheme ============
+# CRLF handling is covered in tests/unit/parse.test.js with an inline string --
+# .gitattributes pins this file to LF, so it cannot carry a CR here.
+Total: 254 proxies
+Updated: 2026-08-08
+join @nonexistent_channel_for_tests

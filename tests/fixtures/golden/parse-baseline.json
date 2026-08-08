@@ -1,0 +1,1374 @@
+{
+  "_generatedBy": "node tests/helpers/record-baseline.js",
+  "_recordedFrom": "public/js/script.js",
+  "_fixture": "tests/fixtures/proxies-dirty.txt",
+  "_note": "Generated file. Do not hand-edit. Behaviour pin for the ES-module refactor.",
+  "inputLines": 312,
+  "skippedCount": 5,
+  "dupCount": 10,
+  "proxyCount": 227,
+  "proxies": [
+    {
+      "server": "192.0.2.1",
+      "port": 443,
+      "secret": "ee1a2b3c4d5e6f708192a3b4c5d6e7f8",
+      "original": "tg://proxy?server=192.0.2.1&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8"
+    },
+    {
+      "server": "192.0.2.2",
+      "port": 443,
+      "secret": "dd1a2b3c4d5e6f708192a3b4c5d6e7f8",
+      "original": "tg://proxy?server=192.0.2.2&port=443&secret=dd1a2b3c4d5e6f708192a3b4c5d6e7f8"
+    },
+    {
+      "server": "192.0.2.3",
+      "port": 8443,
+      "secret": "7g8SNBVWeJisNO3q8VZ4mHM",
+      "original": "tg://proxy?server=192.0.2.3&port=8443&secret=7g8SNBVWeJisNO3q8VZ4mHM"
+    },
+    {
+      "server": "192.0.2.4",
+      "port": 80,
+      "secret": "ee0011223344556677889900aabbccdd",
+      "original": "tg://proxy?server=192.0.2.4&port=80&secret=ee0011223344556677889900aabbccdd"
+    },
+    {
+      "server": "192.0.2.5",
+      "port": 8080,
+      "secret": "ee0011223344556677889900aabbccde",
+      "original": "tg://proxy?server=192.0.2.5&port=8080&secret=ee0011223344556677889900aabbccde"
+    },
+    {
+      "server": "192.0.2.6",
+      "port": 443,
+      "secret": "eeaabbccddeeff00112233445566778877772e6d6963726f736f66742e636f6d",
+      "original": "tg://proxy?server=192.0.2.6&port=443&secret=eeaabbccddeeff00112233445566778877772e6d6963726f736f66742e636f6d"
+    },
+    {
+      "server": "192.0.2.7",
+      "port": 443,
+      "secret": "eeaabbccddeeff00112233445566778877772e676f6f676c652e636f6d",
+      "original": "tg://proxy?server=192.0.2.7&port=443&secret=eeaabbccddeeff00112233445566778877772e676f6f676c652e636f6d"
+    },
+    {
+      "server": "192.0.2.8",
+      "port": 443,
+      "secret": "7gABAgMEBQYHCAkKCwwNDg8",
+      "original": "tg://proxy?server=192.0.2.8&port=443&secret=7gABAgMEBQYHCAkKCwwNDg8"
+    },
+    {
+      "server": "192.0.2.9",
+      "port": 443,
+      "secret": "7gABAgMEBQYHCAkKCwwNDg8=",
+      "original": "tg://proxy?server=192.0.2.9&port=443&secret=7gABAgMEBQYHCAkKCwwNDg8="
+    },
+    {
+      "server": "192.0.2.10",
+      "port": 443,
+      "secret": "7g-_AgMEBQYHCAkKCwwNDg8",
+      "original": "tg://proxy?server=192.0.2.10&port=443&secret=7g-_AgMEBQYHCAkKCwwNDg8"
+    },
+    {
+      "server": "192.0.2.11",
+      "port": 443,
+      "secret": "7g /AgMEBQYHCAkKCwwNDg8=",
+      "original": "tg://proxy?server=192.0.2.11&port=443&secret=7g+/AgMEBQYHCAkKCwwNDg8="
+    },
+    {
+      "server": "192.0.2.12",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344ff",
+      "original": "https://t.me/proxy?server=192.0.2.12&port=443&secret=ee1122334455667788990011223344ff"
+    },
+    {
+      "server": "192.0.2.13",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344fe",
+      "original": "https://t.me/proxy?server=192.0.2.13&port=443&secret=ee1122334455667788990011223344fe"
+    },
+    {
+      "server": "192.0.2.14",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344fd",
+      "original": "http://t.me/proxy?server=192.0.2.14&port=443&secret=ee1122334455667788990011223344fd"
+    },
+    {
+      "server": "192.0.2.15",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344fc",
+      "original": "https://t.me/proxy/?server=192.0.2.15&port=443&secret=ee1122334455667788990011223344fc"
+    },
+    {
+      "server": "192.0.2.16",
+      "port": 1080,
+      "secret": "ee1122334455667788990011223344fb",
+      "original": "socks5://192.0.2.16?server=192.0.2.16&port=1080&secret=ee1122334455667788990011223344fb"
+    },
+    {
+      "server": "192.0.2.17",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344fa",
+      "original": "javascript://x?server=192.0.2.17&port=443&secret=ee1122334455667788990011223344fa"
+    },
+    {
+      "server": "192.0.2.18",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f9",
+      "original": "file://localhost?server=192.0.2.18&port=443&secret=ee1122334455667788990011223344f9"
+    },
+    {
+      "server": "192.0.2.19",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f8",
+      "original": "tg://proxy?secret=ee1122334455667788990011223344f8&port=443&server=192.0.2.19"
+    },
+    {
+      "server": "192.0.2.20",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f7",
+      "original": "tg://proxy?server=192.0.2.20&port=443&secret=ee1122334455667788990011223344f7&utm_source=channel"
+    },
+    {
+      "server": "192.0.2.21",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f6",
+      "original": "tg://proxy?server=192.0.2.21&port=443&secret=ee1122334455667788990011223344f6&comment=fast"
+    },
+    {
+      "server": "192.0.2.22",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f5",
+      "original": "tg://proxy?server=192.0.2.22&port=443&secret=ee1122334455667788990011223344f5"
+    },
+    {
+      "server": "192.0.2.23",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f4",
+      "original": "tg://proxy?server=192.0.2.23&port=443.&secret=ee1122334455667788990011223344f4"
+    },
+    {
+      "server": "192.0.2.24",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f3",
+      "original": "tg://proxy?server=192.0.2.24&port=443&secret=ee1122334455667788990011223344f3"
+    },
+    {
+      "server": "192.0.2.25",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f2",
+      "original": "tg://proxy?server=192.0.2.25&port=443&secret=ee1122334455667788990011223344f2"
+    },
+    {
+      "server": "192.0.2.26",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f1",
+      "original": "tg://proxy?server=192.0.2.26&port=443&secret=ee1122334455667788990011223344f1"
+    },
+    {
+      "server": "192.0.2.27",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344f0",
+      "original": "tg://proxy?server=192.0.2.27&port=443&secret=ee1122334455667788990011223344f0"
+    },
+    {
+      "server": "<script>alert(1)</script>",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344ef",
+      "original": "tg://proxy?server=<script>alert(1)</script>&port=443&secret=ee1122334455667788990011223344ef"
+    },
+    {
+      "server": "\" onerror=\"alert(1)",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344ee",
+      "original": "tg://proxy?server=\" onerror=\"alert(1)&port=443&secret=ee1122334455667788990011223344ee"
+    },
+    {
+      "server": "<img src=x onerror=alert(1)>",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344ed",
+      "original": "tg://proxy?server=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E&port=443&secret=ee1122334455667788990011223344ed"
+    },
+    {
+      "server": "javascript:alert(1)",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344ec",
+      "original": "tg://proxy?server=javascript:alert(1)&port=443&secret=ee1122334455667788990011223344ec"
+    },
+    {
+      "server": "192.0.2.28",
+      "port": 443,
+      "secret": "ee11223344556677889900112233'44eb",
+      "original": "tg://proxy?server=192.0.2.28&port=443&secret=ee11223344556677889900112233'44eb"
+    },
+    {
+      "server": "пример.рф",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344ea",
+      "original": "tg://proxy?server=пример.рф&port=443&secret=ee1122334455667788990011223344ea"
+    },
+    {
+      "server": "xn--e1afmkfd.xn--p1ai",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344e9",
+      "original": "tg://proxy?server=xn--e1afmkfd.xn--p1ai&port=443&secret=ee1122334455667788990011223344e9"
+    },
+    {
+      "server": "例え.テスト",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344e8",
+      "original": "tg://proxy?server=例え.テスト&port=443&secret=ee1122334455667788990011223344e8"
+    },
+    {
+      "server": "[2001:db8::1]",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344e7",
+      "original": "tg://proxy?server=[2001:db8::1]&port=443&secret=ee1122334455667788990011223344e7"
+    },
+    {
+      "server": "2001:db8::2",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344e6",
+      "original": "tg://proxy?server=2001:db8::2&port=443&secret=ee1122334455667788990011223344e6"
+    },
+    {
+      "server": "192.0.2.44",
+      "port": 1,
+      "secret": "ee1122334455667788990011223344d7",
+      "original": "tg://proxy?server=192.0.2.44&port=1&secret=ee1122334455667788990011223344d7"
+    },
+    {
+      "server": "192.0.2.45",
+      "port": 65535,
+      "secret": "ee1122334455667788990011223344d6",
+      "original": "tg://proxy?server=192.0.2.45&port=65535&secret=ee1122334455667788990011223344d6"
+    },
+    {
+      "server": "192.0.2.49",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344d2",
+      "original": "tg://proxy?server=192.0.2.49&port=443abc&secret=ee1122334455667788990011223344d2"
+    },
+    {
+      "server": "192.0.2.50",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344d1",
+      "original": "tg://proxy?server=192.0.2.50&port=443.9&secret=ee1122334455667788990011223344d1"
+    },
+    {
+      "server": "192.0.2.51",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344d0",
+      "original": "tg://proxy?server=192.0.2.51&port=+443&secret=ee1122334455667788990011223344d0"
+    },
+    {
+      "server": "192.0.2.52",
+      "port": 443,
+      "secret": "ee1122334455667788990011223344cf",
+      "original": "tg://proxy?server=192.0.2.52&port=%20443&secret=ee1122334455667788990011223344cf"
+    },
+    {
+      "server": "192.0.2.65",
+      "port": 443,
+      "secret": "eeAAAAAAAAAAAAAAAAAAA112233",
+      "original": "tg://proxy?server=192.0.2.65&port=443&secret=eeAAAAAAAAAAAAAAAAAAA112233"
+    },
+    {
+      "server": "192.0.2.1",
+      "port": 444,
+      "secret": "ee1a2b3c4d5e6f708192a3b4c5d6e7f8",
+      "original": "tg://proxy?server=192.0.2.1&port=444&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8"
+    },
+    {
+      "server": "192.0.2.70",
+      "port": 443,
+      "secret": "ee1a2b3c4d5e6f708192a3b4c5d6e7f8",
+      "original": "tg://proxy?server=192.0.2.70&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8"
+    },
+    {
+      "server": "192.0.2.1",
+      "port": 443,
+      "secret": "ee1a2b3c4d5e6f708192a3b4c5d6e7f9",
+      "original": "tg://proxy?server=192.0.2.1&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f9"
+    },
+    {
+      "server": "192.0.2.100",
+      "port": 443,
+      "secret": "ee000000000000000000000000000064",
+      "original": "tg://proxy?server=192.0.2.100&port=443&secret=ee000000000000000000000000000064"
+    },
+    {
+      "server": "192.0.2.101",
+      "port": 443,
+      "secret": "ee000000000000000000000000000065",
+      "original": "tg://proxy?server=192.0.2.101&port=443&secret=ee000000000000000000000000000065"
+    },
+    {
+      "server": "192.0.2.102",
+      "port": 443,
+      "secret": "ee000000000000000000000000000066",
+      "original": "tg://proxy?server=192.0.2.102&port=443&secret=ee000000000000000000000000000066"
+    },
+    {
+      "server": "192.0.2.103",
+      "port": 443,
+      "secret": "ee000000000000000000000000000067",
+      "original": "tg://proxy?server=192.0.2.103&port=443&secret=ee000000000000000000000000000067"
+    },
+    {
+      "server": "192.0.2.104",
+      "port": 443,
+      "secret": "ee000000000000000000000000000068",
+      "original": "tg://proxy?server=192.0.2.104&port=443&secret=ee000000000000000000000000000068"
+    },
+    {
+      "server": "192.0.2.105",
+      "port": 443,
+      "secret": "ee000000000000000000000000000069",
+      "original": "tg://proxy?server=192.0.2.105&port=443&secret=ee000000000000000000000000000069"
+    },
+    {
+      "server": "192.0.2.106",
+      "port": 443,
+      "secret": "ee00000000000000000000000000006a",
+      "original": "tg://proxy?server=192.0.2.106&port=443&secret=ee00000000000000000000000000006a"
+    },
+    {
+      "server": "192.0.2.107",
+      "port": 443,
+      "secret": "ee00000000000000000000000000006b",
+      "original": "tg://proxy?server=192.0.2.107&port=443&secret=ee00000000000000000000000000006b"
+    },
+    {
+      "server": "192.0.2.108",
+      "port": 443,
+      "secret": "ee00000000000000000000000000006c",
+      "original": "tg://proxy?server=192.0.2.108&port=443&secret=ee00000000000000000000000000006c"
+    },
+    {
+      "server": "192.0.2.109",
+      "port": 443,
+      "secret": "ee00000000000000000000000000006d",
+      "original": "tg://proxy?server=192.0.2.109&port=443&secret=ee00000000000000000000000000006d"
+    },
+    {
+      "server": "192.0.2.110",
+      "port": 8443,
+      "secret": "ee00000000000000000000000000006e",
+      "original": "tg://proxy?server=192.0.2.110&port=8443&secret=ee00000000000000000000000000006e"
+    },
+    {
+      "server": "192.0.2.111",
+      "port": 8443,
+      "secret": "ee00000000000000000000000000006f",
+      "original": "tg://proxy?server=192.0.2.111&port=8443&secret=ee00000000000000000000000000006f"
+    },
+    {
+      "server": "192.0.2.112",
+      "port": 8443,
+      "secret": "ee000000000000000000000000000070",
+      "original": "tg://proxy?server=192.0.2.112&port=8443&secret=ee000000000000000000000000000070"
+    },
+    {
+      "server": "192.0.2.113",
+      "port": 8443,
+      "secret": "ee000000000000000000000000000071",
+      "original": "tg://proxy?server=192.0.2.113&port=8443&secret=ee000000000000000000000000000071"
+    },
+    {
+      "server": "192.0.2.114",
+      "port": 8443,
+      "secret": "ee000000000000000000000000000072",
+      "original": "tg://proxy?server=192.0.2.114&port=8443&secret=ee000000000000000000000000000072"
+    },
+    {
+      "server": "192.0.2.115",
+      "port": 8443,
+      "secret": "ee000000000000000000000000000073",
+      "original": "tg://proxy?server=192.0.2.115&port=8443&secret=ee000000000000000000000000000073"
+    },
+    {
+      "server": "192.0.2.116",
+      "port": 8443,
+      "secret": "ee000000000000000000000000000074",
+      "original": "tg://proxy?server=192.0.2.116&port=8443&secret=ee000000000000000000000000000074"
+    },
+    {
+      "server": "192.0.2.117",
+      "port": 8443,
+      "secret": "ee000000000000000000000000000075",
+      "original": "tg://proxy?server=192.0.2.117&port=8443&secret=ee000000000000000000000000000075"
+    },
+    {
+      "server": "192.0.2.118",
+      "port": 8443,
+      "secret": "ee000000000000000000000000000076",
+      "original": "tg://proxy?server=192.0.2.118&port=8443&secret=ee000000000000000000000000000076"
+    },
+    {
+      "server": "192.0.2.119",
+      "port": 8443,
+      "secret": "ee000000000000000000000000000077",
+      "original": "tg://proxy?server=192.0.2.119&port=8443&secret=ee000000000000000000000000000077"
+    },
+    {
+      "server": "192.0.2.120",
+      "port": 80,
+      "secret": "ee000000000000000000000000000078",
+      "original": "tg://proxy?server=192.0.2.120&port=80&secret=ee000000000000000000000000000078"
+    },
+    {
+      "server": "192.0.2.121",
+      "port": 80,
+      "secret": "ee000000000000000000000000000079",
+      "original": "tg://proxy?server=192.0.2.121&port=80&secret=ee000000000000000000000000000079"
+    },
+    {
+      "server": "192.0.2.122",
+      "port": 80,
+      "secret": "ee00000000000000000000000000007a",
+      "original": "tg://proxy?server=192.0.2.122&port=80&secret=ee00000000000000000000000000007a"
+    },
+    {
+      "server": "192.0.2.123",
+      "port": 80,
+      "secret": "ee00000000000000000000000000007b",
+      "original": "tg://proxy?server=192.0.2.123&port=80&secret=ee00000000000000000000000000007b"
+    },
+    {
+      "server": "192.0.2.124",
+      "port": 80,
+      "secret": "ee00000000000000000000000000007c",
+      "original": "tg://proxy?server=192.0.2.124&port=80&secret=ee00000000000000000000000000007c"
+    },
+    {
+      "server": "192.0.2.125",
+      "port": 80,
+      "secret": "ee00000000000000000000000000007d",
+      "original": "tg://proxy?server=192.0.2.125&port=80&secret=ee00000000000000000000000000007d"
+    },
+    {
+      "server": "192.0.2.126",
+      "port": 80,
+      "secret": "ee00000000000000000000000000007e",
+      "original": "tg://proxy?server=192.0.2.126&port=80&secret=ee00000000000000000000000000007e"
+    },
+    {
+      "server": "192.0.2.127",
+      "port": 80,
+      "secret": "ee00000000000000000000000000007f",
+      "original": "tg://proxy?server=192.0.2.127&port=80&secret=ee00000000000000000000000000007f"
+    },
+    {
+      "server": "192.0.2.128",
+      "port": 80,
+      "secret": "ee000000000000000000000000000080",
+      "original": "tg://proxy?server=192.0.2.128&port=80&secret=ee000000000000000000000000000080"
+    },
+    {
+      "server": "192.0.2.129",
+      "port": 80,
+      "secret": "ee000000000000000000000000000081",
+      "original": "tg://proxy?server=192.0.2.129&port=80&secret=ee000000000000000000000000000081"
+    },
+    {
+      "server": "192.0.2.130",
+      "port": 2053,
+      "secret": "ee000000000000000000000000000082",
+      "original": "tg://proxy?server=192.0.2.130&port=2053&secret=ee000000000000000000000000000082"
+    },
+    {
+      "server": "192.0.2.131",
+      "port": 2053,
+      "secret": "ee000000000000000000000000000083",
+      "original": "tg://proxy?server=192.0.2.131&port=2053&secret=ee000000000000000000000000000083"
+    },
+    {
+      "server": "192.0.2.132",
+      "port": 2053,
+      "secret": "ee000000000000000000000000000084",
+      "original": "tg://proxy?server=192.0.2.132&port=2053&secret=ee000000000000000000000000000084"
+    },
+    {
+      "server": "192.0.2.133",
+      "port": 2053,
+      "secret": "ee000000000000000000000000000085",
+      "original": "tg://proxy?server=192.0.2.133&port=2053&secret=ee000000000000000000000000000085"
+    },
+    {
+      "server": "192.0.2.134",
+      "port": 2053,
+      "secret": "ee000000000000000000000000000086",
+      "original": "tg://proxy?server=192.0.2.134&port=2053&secret=ee000000000000000000000000000086"
+    },
+    {
+      "server": "192.0.2.135",
+      "port": 2053,
+      "secret": "ee000000000000000000000000000087",
+      "original": "tg://proxy?server=192.0.2.135&port=2053&secret=ee000000000000000000000000000087"
+    },
+    {
+      "server": "192.0.2.136",
+      "port": 2053,
+      "secret": "ee000000000000000000000000000088",
+      "original": "tg://proxy?server=192.0.2.136&port=2053&secret=ee000000000000000000000000000088"
+    },
+    {
+      "server": "192.0.2.137",
+      "port": 2053,
+      "secret": "ee000000000000000000000000000089",
+      "original": "tg://proxy?server=192.0.2.137&port=2053&secret=ee000000000000000000000000000089"
+    },
+    {
+      "server": "192.0.2.138",
+      "port": 2053,
+      "secret": "ee00000000000000000000000000008a",
+      "original": "tg://proxy?server=192.0.2.138&port=2053&secret=ee00000000000000000000000000008a"
+    },
+    {
+      "server": "192.0.2.139",
+      "port": 2053,
+      "secret": "ee00000000000000000000000000008b",
+      "original": "tg://proxy?server=192.0.2.139&port=2053&secret=ee00000000000000000000000000008b"
+    },
+    {
+      "server": "192.0.2.140",
+      "port": 443,
+      "secret": "ee00000000000000000000000000008c",
+      "original": "https://t.me/proxy?server=192.0.2.140&port=443&secret=ee00000000000000000000000000008c"
+    },
+    {
+      "server": "192.0.2.141",
+      "port": 443,
+      "secret": "ee00000000000000000000000000008d",
+      "original": "https://t.me/proxy?server=192.0.2.141&port=443&secret=ee00000000000000000000000000008d"
+    },
+    {
+      "server": "192.0.2.142",
+      "port": 443,
+      "secret": "ee00000000000000000000000000008e",
+      "original": "https://t.me/proxy?server=192.0.2.142&port=443&secret=ee00000000000000000000000000008e"
+    },
+    {
+      "server": "192.0.2.143",
+      "port": 443,
+      "secret": "ee00000000000000000000000000008f",
+      "original": "https://t.me/proxy?server=192.0.2.143&port=443&secret=ee00000000000000000000000000008f"
+    },
+    {
+      "server": "192.0.2.144",
+      "port": 443,
+      "secret": "ee000000000000000000000000000090",
+      "original": "https://t.me/proxy?server=192.0.2.144&port=443&secret=ee000000000000000000000000000090"
+    },
+    {
+      "server": "192.0.2.145",
+      "port": 443,
+      "secret": "ee000000000000000000000000000091",
+      "original": "https://t.me/proxy?server=192.0.2.145&port=443&secret=ee000000000000000000000000000091"
+    },
+    {
+      "server": "192.0.2.146",
+      "port": 443,
+      "secret": "ee000000000000000000000000000092",
+      "original": "https://t.me/proxy?server=192.0.2.146&port=443&secret=ee000000000000000000000000000092"
+    },
+    {
+      "server": "192.0.2.147",
+      "port": 443,
+      "secret": "ee000000000000000000000000000093",
+      "original": "https://t.me/proxy?server=192.0.2.147&port=443&secret=ee000000000000000000000000000093"
+    },
+    {
+      "server": "192.0.2.148",
+      "port": 443,
+      "secret": "ee000000000000000000000000000094",
+      "original": "https://t.me/proxy?server=192.0.2.148&port=443&secret=ee000000000000000000000000000094"
+    },
+    {
+      "server": "192.0.2.149",
+      "port": 443,
+      "secret": "ee000000000000000000000000000095",
+      "original": "https://t.me/proxy?server=192.0.2.149&port=443&secret=ee000000000000000000000000000095"
+    },
+    {
+      "server": "192.0.2.150",
+      "port": 443,
+      "secret": "7gAAAAECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.150&port=443&secret=7gAAAAECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.151",
+      "port": 443,
+      "secret": "7gABAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.151&port=443&secret=7gABAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.152",
+      "port": 443,
+      "secret": "7gACAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.152&port=443&secret=7gACAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.153",
+      "port": 443,
+      "secret": "7gADAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.153&port=443&secret=7gADAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.154",
+      "port": 443,
+      "secret": "7gAEAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.154&port=443&secret=7gAEAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.155",
+      "port": 443,
+      "secret": "7gAFAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.155&port=443&secret=7gAFAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.156",
+      "port": 443,
+      "secret": "7gAGAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.156&port=443&secret=7gAGAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.157",
+      "port": 443,
+      "secret": "7gAHAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.157&port=443&secret=7gAHAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.158",
+      "port": 443,
+      "secret": "7gAIAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.158&port=443&secret=7gAIAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "192.0.2.159",
+      "port": 443,
+      "secret": "7gAJAQECAwQFBgcICQoLDA0",
+      "original": "tg://proxy?server=192.0.2.159&port=443&secret=7gAJAQECAwQFBgcICQoLDA0"
+    },
+    {
+      "server": "proxy160.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a0",
+      "original": "tg://proxy?server=proxy160.example.net&port=443&secret=ee0000000000000000000000000000a0"
+    },
+    {
+      "server": "proxy161.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a1",
+      "original": "tg://proxy?server=proxy161.example.net&port=443&secret=ee0000000000000000000000000000a1"
+    },
+    {
+      "server": "proxy162.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a2",
+      "original": "tg://proxy?server=proxy162.example.net&port=443&secret=ee0000000000000000000000000000a2"
+    },
+    {
+      "server": "proxy163.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a3",
+      "original": "tg://proxy?server=proxy163.example.net&port=443&secret=ee0000000000000000000000000000a3"
+    },
+    {
+      "server": "proxy164.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a4",
+      "original": "tg://proxy?server=proxy164.example.net&port=443&secret=ee0000000000000000000000000000a4"
+    },
+    {
+      "server": "proxy165.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a5",
+      "original": "tg://proxy?server=proxy165.example.net&port=443&secret=ee0000000000000000000000000000a5"
+    },
+    {
+      "server": "proxy166.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a6",
+      "original": "tg://proxy?server=proxy166.example.net&port=443&secret=ee0000000000000000000000000000a6"
+    },
+    {
+      "server": "proxy167.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a7",
+      "original": "tg://proxy?server=proxy167.example.net&port=443&secret=ee0000000000000000000000000000a7"
+    },
+    {
+      "server": "proxy168.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a8",
+      "original": "tg://proxy?server=proxy168.example.net&port=443&secret=ee0000000000000000000000000000a8"
+    },
+    {
+      "server": "proxy169.example.net",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000a9",
+      "original": "tg://proxy?server=proxy169.example.net&port=443&secret=ee0000000000000000000000000000a9"
+    },
+    {
+      "server": "192.0.2.170",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000aa",
+      "original": "tg://proxy?server=192.0.2.170&port=443&secret=ee0000000000000000000000000000aa"
+    },
+    {
+      "server": "192.0.2.171",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ab",
+      "original": "tg://proxy?server=192.0.2.171&port=443&secret=ee0000000000000000000000000000ab"
+    },
+    {
+      "server": "192.0.2.172",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ac",
+      "original": "tg://proxy?server=192.0.2.172&port=443&secret=ee0000000000000000000000000000ac"
+    },
+    {
+      "server": "192.0.2.173",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ad",
+      "original": "tg://proxy?server=192.0.2.173&port=443&secret=ee0000000000000000000000000000ad"
+    },
+    {
+      "server": "192.0.2.174",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ae",
+      "original": "tg://proxy?server=192.0.2.174&port=443&secret=ee0000000000000000000000000000ae"
+    },
+    {
+      "server": "192.0.2.175",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000af",
+      "original": "tg://proxy?server=192.0.2.175&port=443&secret=ee0000000000000000000000000000af"
+    },
+    {
+      "server": "192.0.2.176",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b0",
+      "original": "tg://proxy?server=192.0.2.176&port=443&secret=ee0000000000000000000000000000b0"
+    },
+    {
+      "server": "192.0.2.177",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b1",
+      "original": "tg://proxy?server=192.0.2.177&port=443&secret=ee0000000000000000000000000000b1"
+    },
+    {
+      "server": "192.0.2.178",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b2",
+      "original": "tg://proxy?server=192.0.2.178&port=443&secret=ee0000000000000000000000000000b2"
+    },
+    {
+      "server": "192.0.2.179",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b3",
+      "original": "tg://proxy?server=192.0.2.179&port=443&secret=ee0000000000000000000000000000b3"
+    },
+    {
+      "server": "192.0.2.180",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b4",
+      "original": "tg://proxy?server=192.0.2.180&port=443&secret=ee0000000000000000000000000000b4"
+    },
+    {
+      "server": "192.0.2.181",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b5",
+      "original": "tg://proxy?server=192.0.2.181&port=443&secret=ee0000000000000000000000000000b5"
+    },
+    {
+      "server": "192.0.2.182",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b6",
+      "original": "tg://proxy?server=192.0.2.182&port=443&secret=ee0000000000000000000000000000b6"
+    },
+    {
+      "server": "192.0.2.183",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b7",
+      "original": "tg://proxy?server=192.0.2.183&port=443&secret=ee0000000000000000000000000000b7"
+    },
+    {
+      "server": "192.0.2.184",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b8",
+      "original": "tg://proxy?server=192.0.2.184&port=443&secret=ee0000000000000000000000000000b8"
+    },
+    {
+      "server": "192.0.2.185",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000b9",
+      "original": "tg://proxy?server=192.0.2.185&port=443&secret=ee0000000000000000000000000000b9"
+    },
+    {
+      "server": "192.0.2.186",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ba",
+      "original": "tg://proxy?server=192.0.2.186&port=443&secret=ee0000000000000000000000000000ba"
+    },
+    {
+      "server": "192.0.2.187",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000bb",
+      "original": "tg://proxy?server=192.0.2.187&port=443&secret=ee0000000000000000000000000000bb"
+    },
+    {
+      "server": "192.0.2.188",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000bc",
+      "original": "tg://proxy?server=192.0.2.188&port=443&secret=ee0000000000000000000000000000bc"
+    },
+    {
+      "server": "192.0.2.189",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000bd",
+      "original": "tg://proxy?server=192.0.2.189&port=443&secret=ee0000000000000000000000000000bd"
+    },
+    {
+      "server": "192.0.2.190",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000be",
+      "original": "tg://proxy?server=192.0.2.190&port=443&secret=ee0000000000000000000000000000be"
+    },
+    {
+      "server": "192.0.2.191",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000bf",
+      "original": "tg://proxy?server=192.0.2.191&port=443&secret=ee0000000000000000000000000000bf"
+    },
+    {
+      "server": "192.0.2.192",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c0",
+      "original": "tg://proxy?server=192.0.2.192&port=443&secret=ee0000000000000000000000000000c0"
+    },
+    {
+      "server": "192.0.2.193",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c1",
+      "original": "tg://proxy?server=192.0.2.193&port=443&secret=ee0000000000000000000000000000c1"
+    },
+    {
+      "server": "192.0.2.194",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c2",
+      "original": "tg://proxy?server=192.0.2.194&port=443&secret=ee0000000000000000000000000000c2"
+    },
+    {
+      "server": "192.0.2.195",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c3",
+      "original": "tg://proxy?server=192.0.2.195&port=443&secret=ee0000000000000000000000000000c3"
+    },
+    {
+      "server": "192.0.2.196",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c4",
+      "original": "tg://proxy?server=192.0.2.196&port=443&secret=ee0000000000000000000000000000c4"
+    },
+    {
+      "server": "192.0.2.197",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c5",
+      "original": "tg://proxy?server=192.0.2.197&port=443&secret=ee0000000000000000000000000000c5"
+    },
+    {
+      "server": "192.0.2.198",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c6",
+      "original": "tg://proxy?server=192.0.2.198&port=443&secret=ee0000000000000000000000000000c6"
+    },
+    {
+      "server": "192.0.2.199",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c7",
+      "original": "tg://proxy?server=192.0.2.199&port=443&secret=ee0000000000000000000000000000c7"
+    },
+    {
+      "server": "192.0.2.200",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c8",
+      "original": "tg://proxy?server=192.0.2.200&port=443&secret=ee0000000000000000000000000000c8"
+    },
+    {
+      "server": "192.0.2.201",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000c9",
+      "original": "tg://proxy?server=192.0.2.201&port=443&secret=ee0000000000000000000000000000c9"
+    },
+    {
+      "server": "192.0.2.202",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ca",
+      "original": "tg://proxy?server=192.0.2.202&port=443&secret=ee0000000000000000000000000000ca"
+    },
+    {
+      "server": "192.0.2.203",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000cb",
+      "original": "tg://proxy?server=192.0.2.203&port=443&secret=ee0000000000000000000000000000cb"
+    },
+    {
+      "server": "192.0.2.204",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000cc",
+      "original": "tg://proxy?server=192.0.2.204&port=443&secret=ee0000000000000000000000000000cc"
+    },
+    {
+      "server": "192.0.2.205",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000cd",
+      "original": "tg://proxy?server=192.0.2.205&port=443&secret=ee0000000000000000000000000000cd"
+    },
+    {
+      "server": "192.0.2.206",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ce",
+      "original": "tg://proxy?server=192.0.2.206&port=443&secret=ee0000000000000000000000000000ce"
+    },
+    {
+      "server": "192.0.2.207",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000cf",
+      "original": "tg://proxy?server=192.0.2.207&port=443&secret=ee0000000000000000000000000000cf"
+    },
+    {
+      "server": "192.0.2.208",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d0",
+      "original": "tg://proxy?server=192.0.2.208&port=443&secret=ee0000000000000000000000000000d0"
+    },
+    {
+      "server": "192.0.2.209",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d1",
+      "original": "tg://proxy?server=192.0.2.209&port=443&secret=ee0000000000000000000000000000d1"
+    },
+    {
+      "server": "192.0.2.210",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d2",
+      "original": "tg://proxy?server=192.0.2.210&port=443&secret=ee0000000000000000000000000000d2"
+    },
+    {
+      "server": "192.0.2.211",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d3",
+      "original": "tg://proxy?server=192.0.2.211&port=443&secret=ee0000000000000000000000000000d3"
+    },
+    {
+      "server": "192.0.2.212",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d4",
+      "original": "tg://proxy?server=192.0.2.212&port=443&secret=ee0000000000000000000000000000d4"
+    },
+    {
+      "server": "192.0.2.213",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d5",
+      "original": "tg://proxy?server=192.0.2.213&port=443&secret=ee0000000000000000000000000000d5"
+    },
+    {
+      "server": "192.0.2.214",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d6",
+      "original": "tg://proxy?server=192.0.2.214&port=443&secret=ee0000000000000000000000000000d6"
+    },
+    {
+      "server": "192.0.2.215",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d7",
+      "original": "tg://proxy?server=192.0.2.215&port=443&secret=ee0000000000000000000000000000d7"
+    },
+    {
+      "server": "192.0.2.216",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d8",
+      "original": "tg://proxy?server=192.0.2.216&port=443&secret=ee0000000000000000000000000000d8"
+    },
+    {
+      "server": "192.0.2.217",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000d9",
+      "original": "tg://proxy?server=192.0.2.217&port=443&secret=ee0000000000000000000000000000d9"
+    },
+    {
+      "server": "192.0.2.218",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000da",
+      "original": "tg://proxy?server=192.0.2.218&port=443&secret=ee0000000000000000000000000000da"
+    },
+    {
+      "server": "192.0.2.219",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000db",
+      "original": "tg://proxy?server=192.0.2.219&port=443&secret=ee0000000000000000000000000000db"
+    },
+    {
+      "server": "192.0.2.220",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000dc",
+      "original": "tg://proxy?server=192.0.2.220&port=443&secret=ee0000000000000000000000000000dc"
+    },
+    {
+      "server": "192.0.2.221",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000dd",
+      "original": "tg://proxy?server=192.0.2.221&port=443&secret=ee0000000000000000000000000000dd"
+    },
+    {
+      "server": "192.0.2.222",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000de",
+      "original": "tg://proxy?server=192.0.2.222&port=443&secret=ee0000000000000000000000000000de"
+    },
+    {
+      "server": "192.0.2.223",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000df",
+      "original": "tg://proxy?server=192.0.2.223&port=443&secret=ee0000000000000000000000000000df"
+    },
+    {
+      "server": "192.0.2.224",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e0",
+      "original": "tg://proxy?server=192.0.2.224&port=443&secret=ee0000000000000000000000000000e0"
+    },
+    {
+      "server": "192.0.2.225",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e1",
+      "original": "tg://proxy?server=192.0.2.225&port=443&secret=ee0000000000000000000000000000e1"
+    },
+    {
+      "server": "192.0.2.226",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e2",
+      "original": "tg://proxy?server=192.0.2.226&port=443&secret=ee0000000000000000000000000000e2"
+    },
+    {
+      "server": "192.0.2.227",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e3",
+      "original": "tg://proxy?server=192.0.2.227&port=443&secret=ee0000000000000000000000000000e3"
+    },
+    {
+      "server": "192.0.2.228",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e4",
+      "original": "tg://proxy?server=192.0.2.228&port=443&secret=ee0000000000000000000000000000e4"
+    },
+    {
+      "server": "192.0.2.229",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e5",
+      "original": "tg://proxy?server=192.0.2.229&port=443&secret=ee0000000000000000000000000000e5"
+    },
+    {
+      "server": "192.0.2.230",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e6",
+      "original": "tg://proxy?server=192.0.2.230&port=443&secret=ee0000000000000000000000000000e6"
+    },
+    {
+      "server": "192.0.2.231",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e7",
+      "original": "tg://proxy?server=192.0.2.231&port=443&secret=ee0000000000000000000000000000e7"
+    },
+    {
+      "server": "192.0.2.232",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e8",
+      "original": "tg://proxy?server=192.0.2.232&port=443&secret=ee0000000000000000000000000000e8"
+    },
+    {
+      "server": "192.0.2.233",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000e9",
+      "original": "tg://proxy?server=192.0.2.233&port=443&secret=ee0000000000000000000000000000e9"
+    },
+    {
+      "server": "192.0.2.234",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ea",
+      "original": "tg://proxy?server=192.0.2.234&port=443&secret=ee0000000000000000000000000000ea"
+    },
+    {
+      "server": "192.0.2.235",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000eb",
+      "original": "tg://proxy?server=192.0.2.235&port=443&secret=ee0000000000000000000000000000eb"
+    },
+    {
+      "server": "192.0.2.236",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ec",
+      "original": "tg://proxy?server=192.0.2.236&port=443&secret=ee0000000000000000000000000000ec"
+    },
+    {
+      "server": "192.0.2.237",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ed",
+      "original": "tg://proxy?server=192.0.2.237&port=443&secret=ee0000000000000000000000000000ed"
+    },
+    {
+      "server": "192.0.2.238",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ee",
+      "original": "tg://proxy?server=192.0.2.238&port=443&secret=ee0000000000000000000000000000ee"
+    },
+    {
+      "server": "192.0.2.239",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000ef",
+      "original": "tg://proxy?server=192.0.2.239&port=443&secret=ee0000000000000000000000000000ef"
+    },
+    {
+      "server": "192.0.2.240",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f0",
+      "original": "tg://proxy?server=192.0.2.240&port=443&secret=ee0000000000000000000000000000f0"
+    },
+    {
+      "server": "192.0.2.241",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f1",
+      "original": "tg://proxy?server=192.0.2.241&port=443&secret=ee0000000000000000000000000000f1"
+    },
+    {
+      "server": "192.0.2.242",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f2",
+      "original": "tg://proxy?server=192.0.2.242&port=443&secret=ee0000000000000000000000000000f2"
+    },
+    {
+      "server": "192.0.2.243",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f3",
+      "original": "tg://proxy?server=192.0.2.243&port=443&secret=ee0000000000000000000000000000f3"
+    },
+    {
+      "server": "192.0.2.244",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f4",
+      "original": "tg://proxy?server=192.0.2.244&port=443&secret=ee0000000000000000000000000000f4"
+    },
+    {
+      "server": "192.0.2.245",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f5",
+      "original": "tg://proxy?server=192.0.2.245&port=443&secret=ee0000000000000000000000000000f5"
+    },
+    {
+      "server": "192.0.2.246",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f6",
+      "original": "tg://proxy?server=192.0.2.246&port=443&secret=ee0000000000000000000000000000f6"
+    },
+    {
+      "server": "192.0.2.247",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f7",
+      "original": "tg://proxy?server=192.0.2.247&port=443&secret=ee0000000000000000000000000000f7"
+    },
+    {
+      "server": "192.0.2.248",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f8",
+      "original": "tg://proxy?server=192.0.2.248&port=443&secret=ee0000000000000000000000000000f8"
+    },
+    {
+      "server": "192.0.2.249",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000f9",
+      "original": "tg://proxy?server=192.0.2.249&port=443&secret=ee0000000000000000000000000000f9"
+    },
+    {
+      "server": "192.0.2.250",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000fa",
+      "original": "tg://proxy?server=192.0.2.250&port=443&secret=ee0000000000000000000000000000fa"
+    },
+    {
+      "server": "192.0.2.251",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000fb",
+      "original": "tg://proxy?server=192.0.2.251&port=443&secret=ee0000000000000000000000000000fb"
+    },
+    {
+      "server": "192.0.2.252",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000fc",
+      "original": "tg://proxy?server=192.0.2.252&port=443&secret=ee0000000000000000000000000000fc"
+    },
+    {
+      "server": "192.0.2.253",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000fd",
+      "original": "tg://proxy?server=192.0.2.253&port=443&secret=ee0000000000000000000000000000fd"
+    },
+    {
+      "server": "192.0.2.254",
+      "port": 443,
+      "secret": "ee0000000000000000000000000000fe",
+      "original": "tg://proxy?server=192.0.2.254&port=443&secret=ee0000000000000000000000000000fe"
+    },
+    {
+      "server": "198.51.100.1",
+      "port": 443,
+      "secret": "ee1000000000000000000000000000a0",
+      "original": "tg://proxy?server=198.51.100.1&port=443&secret=ee1000000000000000000000000000a0"
+    },
+    {
+      "server": "198.51.100.2",
+      "port": 443,
+      "secret": "ee1000000000000000000000000000a1",
+      "original": "tg://proxy?server=198.51.100.2&port=443&secret=ee1000000000000000000000000000a1"
+    },
+    {
+      "server": "198.51.100.3",
+      "port": 443,
+      "secret": "ee1000000000000000000000000000a2",
+      "original": "tg://proxy?server=198.51.100.3&port=443&secret=ee1000000000000000000000000000a2"
+    },
+    {
+      "server": "198.51.100.4",
+      "port": 443,
+      "secret": "ee1000000000000000000000000000a3",
+      "original": "tg://proxy?server=198.51.100.4&port=443&secret=ee1000000000000000000000000000a3"
+    },
+    {
+      "server": "198.51.100.5",
+      "port": 443,
+      "secret": "ee1000000000000000000000000000a4",
+      "original": "tg://proxy?server=198.51.100.5&port=443&secret=ee1000000000000000000000000000a4"
+    },
+    {
+      "server": "198.51.100.6",
+      "port": 2053,
+      "secret": "ee1000000000000000000000000000a5",
+      "original": "tg://proxy?server=198.51.100.6&port=2053&secret=ee1000000000000000000000000000a5"
+    },
+    {
+      "server": "198.51.100.7",
+      "port": 2053,
+      "secret": "ee1000000000000000000000000000a6",
+      "original": "tg://proxy?server=198.51.100.7&port=2053&secret=ee1000000000000000000000000000a6"
+    },
+    {
+      "server": "198.51.100.8",
+      "port": 2053,
+      "secret": "ee1000000000000000000000000000a7",
+      "original": "tg://proxy?server=198.51.100.8&port=2053&secret=ee1000000000000000000000000000a7"
+    },
+    {
+      "server": "198.51.100.9",
+      "port": 2053,
+      "secret": "ee1000000000000000000000000000a8",
+      "original": "tg://proxy?server=198.51.100.9&port=2053&secret=ee1000000000000000000000000000a8"
+    },
+    {
+      "server": "198.51.100.10",
+      "port": 2053,
+      "secret": "ee1000000000000000000000000000a9",
+      "original": "tg://proxy?server=198.51.100.10&port=2053&secret=ee1000000000000000000000000000a9"
+    },
+    {
+      "server": "198.51.100.11",
+      "port": 8443,
+      "secret": "ee1000000000000000000000000000aa",
+      "original": "tg://proxy?server=198.51.100.11&port=8443&secret=ee1000000000000000000000000000aa"
+    },
+    {
+      "server": "198.51.100.12",
+      "port": 8443,
+      "secret": "ee1000000000000000000000000000ab",
+      "original": "tg://proxy?server=198.51.100.12&port=8443&secret=ee1000000000000000000000000000ab"
+    },
+    {
+      "server": "198.51.100.13",
+      "port": 8443,
+      "secret": "ee1000000000000000000000000000ac",
+      "original": "tg://proxy?server=198.51.100.13&port=8443&secret=ee1000000000000000000000000000ac"
+    },
+    {
+      "server": "198.51.100.14",
+      "port": 8443,
+      "secret": "ee1000000000000000000000000000ad",
+      "original": "tg://proxy?server=198.51.100.14&port=8443&secret=ee1000000000000000000000000000ad"
+    },
+    {
+      "server": "198.51.100.15",
+      "port": 8443,
+      "secret": "ee1000000000000000000000000000ae",
+      "original": "tg://proxy?server=198.51.100.15&port=8443&secret=ee1000000000000000000000000000ae"
+    },
+    {
+      "server": "203.0.113.1",
+      "port": 443,
+      "secret": "ee2000000000000000000000000000b0",
+      "original": "tg://proxy?server=203.0.113.1&port=443&secret=ee2000000000000000000000000000b0"
+    },
+    {
+      "server": "203.0.113.2",
+      "port": 443,
+      "secret": "ee2000000000000000000000000000b1",
+      "original": "tg://proxy?server=203.0.113.2&port=443&secret=ee2000000000000000000000000000b1"
+    },
+    {
+      "server": "203.0.113.3",
+      "port": 443,
+      "secret": "ee2000000000000000000000000000b2",
+      "original": "tg://proxy?server=203.0.113.3&port=443&secret=ee2000000000000000000000000000b2"
+    },
+    {
+      "server": "203.0.113.4",
+      "port": 443,
+      "secret": "ee2000000000000000000000000000b3",
+      "original": "tg://proxy?server=203.0.113.4&port=443&secret=ee2000000000000000000000000000b3"
+    },
+    {
+      "server": "203.0.113.5",
+      "port": 443,
+      "secret": "ee2000000000000000000000000000b4",
+      "original": "tg://proxy?server=203.0.113.5&port=443&secret=ee2000000000000000000000000000b4"
+    },
+    {
+      "server": "203.0.113.6",
+      "port": 80,
+      "secret": "ee2000000000000000000000000000b5",
+      "original": "tg://proxy?server=203.0.113.6&port=80&secret=ee2000000000000000000000000000b5"
+    },
+    {
+      "server": "203.0.113.7",
+      "port": 80,
+      "secret": "ee2000000000000000000000000000b6",
+      "original": "tg://proxy?server=203.0.113.7&port=80&secret=ee2000000000000000000000000000b6"
+    },
+    {
+      "server": "203.0.113.8",
+      "port": 80,
+      "secret": "ee2000000000000000000000000000b7",
+      "original": "tg://proxy?server=203.0.113.8&port=80&secret=ee2000000000000000000000000000b7"
+    },
+    {
+      "server": "203.0.113.9",
+      "port": 80,
+      "secret": "ee2000000000000000000000000000b8",
+      "original": "tg://proxy?server=203.0.113.9&port=80&secret=ee2000000000000000000000000000b8"
+    },
+    {
+      "server": "203.0.113.10",
+      "port": 80,
+      "secret": "ee2000000000000000000000000000b9",
+      "original": "tg://proxy?server=203.0.113.10&port=80&secret=ee2000000000000000000000000000b9"
+    }
+  ]
+}
