@@ -140,6 +140,34 @@ func TestCheckProxyReportsConnectionFailures(t *testing.T) {
 			t.Errorf("ping = %d, want 0 on failure", ping)
 		}
 	})
+
+	// gotd's Client.Run swallows context.Canceled on purpose — it is how the
+	// client signals a normal shutdown once the callback returns — so without
+	// the explicit checkCtx.Err() check in checkProxy this reports a working
+	// proxy with a 0 ms ping. DeadlineExceeded is not affected, which is why
+	// the stall test below passes either way.
+	t.Run("context already cancelled", func(t *testing.T) {
+		host, port := closedLoopbackPort(t)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		start := time.Now()
+		ping, err := checkProxy(ctx, host, port, validSecret, 1)
+		elapsed := time.Since(start)
+
+		if err == nil {
+			t.Fatalf("checkProxy with a cancelled context = %d, nil; want an error", ping)
+		}
+		if ping != 0 {
+			t.Errorf("ping = %d, want 0 on failure", ping)
+		}
+		// The caller's context has to reach the client: without it the call
+		// would run to its own 1s timeout instead of returning immediately.
+		if elapsed > 500*time.Millisecond {
+			t.Errorf("took %v to honour an already-cancelled context; want it to return at once", elapsed)
+		}
+	})
 }
 
 // TestCheckProxyTimesOutOnStalledProxy is the reason for the timeoutSec
