@@ -197,6 +197,16 @@ func checkProxy(ctx context.Context, server string, port int, secret string, tim
 	if err != nil {
 		return 0, err
 	}
+	// client.Run reports a cancelled context as success: it ends with
+	// `if err := g.Wait(); !errors.Is(err, context.Canceled) { return err }`,
+	// because context.Canceled is how it signals a normal shutdown once the
+	// callback has returned. Without this check a cancelled check would be
+	// reported as a working proxy with a 0 ms ping. checkCtx is the right
+	// thing to test: on the success path gotd cancels its own derived group
+	// context, not this one, so a real ping still gets through.
+	if err := checkCtx.Err(); err != nil {
+		return 0, err
+	}
 	return pingResult, nil
 }
 
