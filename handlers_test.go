@@ -3,8 +3,10 @@
 // checkProxy is reached (wrong method, bad JSON, oversized body, too many
 // entries) or carries an empty proxy list, which runs zero checks.
 //
-// checkProxy itself stays covered only by the live test in proxytest_test.go —
-// a fake MTProto server is a much larger piece of work than the handlers are.
+// checkProxy's own failure paths live in checkproxy_test.go, which is hermetic
+// for the same reason; only its success path still needs the live test in
+// proxytest_test.go, since a fake MTProto server is a much larger piece of
+// work than the handlers are.
 package main
 
 import (
