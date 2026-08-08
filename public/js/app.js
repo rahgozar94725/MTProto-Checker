@@ -1,5 +1,6 @@
 import { translations, interpolate } from './i18n.js';
 import { proxyLine, pingClass } from './format.js';
+import { parseProxyList, proxyKey, isAcceptedFilename } from './parse.js';
 
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
@@ -61,7 +62,7 @@ function updateScanSummary() {
     const t = translations[currentLang];
     document.getElementById('inputSummary').textContent = interpolate(t.summaryLoaded, {
         n: allProxies.length,
-        m: skippedCount
+        m: lastSkipped
     });
 }
 
@@ -103,7 +104,9 @@ window.onerror = function(message) {
 };
 
 let workingProxies = [];
-let skippedCount = 0;
+// Spam links dropped by the last parse — display state for #tileSkipped, written once
+// per scan from parseProxyList's return value.
+let lastSkipped = 0;
 let isPaused = false;
 let currentController = null;
 let checkedKeys = new Set();
@@ -139,30 +142,6 @@ function loadSettings() {
 document.getElementById('concurrencySelect').addEventListener('change', saveSettings);
 document.getElementById('timeoutSelect').addEventListener('change', saveSettings);
 loadSettings();
-
-function parseLink(link) {
-    try {
-        let cleanLink = link.trim().replace('.&', '&');
-        if(!cleanLink.includes('://')) return null;
-
-        const urlObj = new URL(cleanLink);
-        const params = new URLSearchParams(urlObj.search);
-        
-        const server = params.get('server');
-        let port = parseInt(params.get('port'));
-        const secret = params.get('secret');
-
-        if (!server || !port || !secret || isNaN(port)) return null;
-        if (port <= 0 || port > 65535) return null;
-
-        if (secret.length > 170 || secret.includes('AAAAAAAAAAAAAAAAAAAA')) {
-            skippedCount++;
-            return null;
-        }
-
-        return { server, port, secret, original: cleanLink };
-    } catch (e) { return null;     }
-}
 
 function openHelp() {
     const urls = {
@@ -219,7 +198,7 @@ function togglePause() {
 
     updatePauseBtn();
     log('RESUMED');
-    const remaining = allProxies.filter(p => !checkedKeys.has(`${p.server}:${p.port}:${p.secret}`));
+    const remaining = allProxies.filter(p => !checkedKeys.has(proxyKey(p)));
     if (remaining.length === 0) {
         finish();
         return;
@@ -298,7 +277,7 @@ async function runCheckStream(proxies, linkMap) {
                     const currentTotal = baseline + data.completed;
                     updateUI(currentTotal, totalOrig);
 
-                    const key = `${data.server}:${data.port}:${data.secret}`;
+                    const key = proxyKey(data);
                     checkedKeys.add(key);
 
                     if (data.ok) {
@@ -325,26 +304,6 @@ async function runCheckStream(proxies, linkMap) {
     }
 }
 
-// Parse every line, drop the unparseable ones, and dedupe by server:port:secret.
-// Resets skippedCount first — parseLink bumps it for spam secrets, and the count
-// is per-scan.
-function parseProxyList(text) {
-    skippedCount = 0;
-    const parsed = text.split('\n').map(parseLink).filter(l => l !== null);
-
-    const seen = new Set();
-    const unique = parsed.filter(p => {
-        const key = `${p.server}:${p.port}:${p.secret}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-
-    const dupCount = parsed.length - unique.length;
-    if (dupCount > 0) log(`Removed ${dupCount} duplicate entries.`);
-    return unique;
-}
-
 async function startCheck() {
     try {
         const t = translations[currentLang];
@@ -357,7 +316,9 @@ async function startCheck() {
         checkedKeys = new Set();
         allProxies = [];
 
-        const validLinks = parseProxyList(input);
+        const { proxies: validLinks, skipped, duplicates } = parseProxyList(input);
+        lastSkipped = skipped;
+        if (duplicates > 0) log(`Removed ${duplicates} duplicate entries.`);
 
         if (validLinks.length === 0) {
             showToast(t.toastNoValid, true);
@@ -365,7 +326,7 @@ async function startCheck() {
             return;
         }
 
-        log(`Parsed ${validLinks.length} valid links. Skipped ${skippedCount} bad links.`);
+        log(`Parsed ${validLinks.length} valid links. Skipped ${lastSkipped} bad links.`);
 
         workingProxies = [];
         document.getElementById('outputProxies').value = '';
@@ -381,7 +342,7 @@ async function startCheck() {
         // Build lookup: "server:port:secret" → original link
         globalLinkMap = new Map();
         for (const p of validLinks) {
-            globalLinkMap.set(`${p.server}:${p.port}:${p.secret}`, p.original);
+            globalLinkMap.set(proxyKey(p), p.original);
         }
 
         allProxies = validLinks;
@@ -421,7 +382,7 @@ function renderStats() {
         workingProxies.length ? workingProxies[0].ping + ' ms' : '—';
     document.getElementById('tileFailed').textContent =
         Math.max(0, lastChecked - workingProxies.length);
-    document.getElementById('tileSkipped').textContent = skippedCount;
+    document.getElementById('tileSkipped').textContent = lastSkipped;
 }
 
 function updateOutput() {
@@ -590,8 +551,6 @@ function handleFileUpload(event) {
 }
 
 // Drag & drop onto the input zone feeds the same reader as the file picker.
-const ACCEPTED_EXTENSIONS = ['.txt', '.csv', '.list'];
-
 (function wireDropZone() {
     const pane = document.querySelector('.io-pane');
     if (!pane) return;
@@ -628,8 +587,7 @@ const ACCEPTED_EXTENSIONS = ['.txt', '.csv', '.list'];
         if (files.length > 1) return showToast(t.toastMultiFile, true);
 
         if (files.length === 1) {
-            const name = files[0].name.toLowerCase();
-            if (!ACCEPTED_EXTENSIONS.some(ext => name.endsWith(ext))) {
+            if (!isAcceptedFilename(files[0].name)) {
                 return showToast(t.toastBadFileType, true);
             }
             return readProxyFile(files[0]);
