@@ -219,15 +219,10 @@ function updatePauseBtn() {
 function updateStartBtn() {
     const btn = document.getElementById('startBtn');
     const t = translations[currentLang];
-    if (scanState === 'idle') {
-        btn.innerText = t.startBtn;
-        btn.className = 'btn-start';
-        btn.disabled = false;
-    } else {
-        btn.innerText = t.stopBtn;
-        btn.className = 'btn-stop';
-        btn.disabled = false;
-    }
+    const idle = scanState === 'idle';
+    btn.innerText = idle ? t.startBtn : t.stopBtn;
+    btn.className = idle ? 'btn-start' : 'btn-stop';
+    btn.disabled = false;
 }
 
 function setScanUI(scanning) {
@@ -257,12 +252,13 @@ const MAX_LOG_LINES = 200;
 
 // kind: true|'error' → red, 'ok' → green, anything else → plain
 function log(msg, kind = null) {
+    const isError = kind === true || kind === 'error';
     const c = document.getElementById('console');
     const line = document.createElement('div');
     line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    if (kind === true || kind === 'error') line.className = 'error-log';
+    if (isError) line.className = 'error-log';
     else if (kind === 'ok') line.className = 'ok-log';
-    if (kind === true || kind === 'error') {
+    if (isError) {
         const drawer = document.getElementById('consoleDrawer');
         if (drawer) drawer.open = true;
     }
@@ -354,49 +350,55 @@ function handleStartStop() {
     else stopScan();
 }
 
-function stopScan() {
+function abortInFlight() {
     if (currentController) {
         currentController.abort();
         currentController = null;
     }
+}
+
+// Return the chrome to its pre-scan state: Start button, input pane restored,
+// pause hidden. Does not touch results — those survive a stop.
+function resetScanUI() {
     scanState = 'idle';
+    isPaused = false;
     updateStartBtn();
     setScanUI(false);
     document.getElementById('pauseBtn').style.display = 'none';
-    isPaused = false;
+}
+
+function reportScanFailure(err) {
+    log(`MAIN ERROR: ${err.message}`, true);
+    alert(translations[currentLang].errorGeneric);
+    resetScanUI();
+}
+
+function stopScan() {
+    abortInFlight();
+    resetScanUI();
     log('STOPPED');
 }
 
 function togglePause() {
     isPaused = !isPaused;
     if (isPaused) {
-        if (currentController) {
-            currentController.abort();
-            currentController = null;
-        }
+        abortInFlight();
         updatePauseBtn();
         log('PAUSED');
-    } else {
-        updatePauseBtn();
-        log('RESUMED');
-        const remaining = allProxies.filter(p => !checkedKeys.has(`${p.server}:${p.port}:${p.secret}`));
-        if (remaining.length === 0) {
-            finish();
-            return;
-        }
-        log(`Resuming with ${remaining.length} unchecked...`);
-        runCheckStream(remaining, globalLinkMap).then(r => {
-            if (r === 'done' || r === 'timeout') finish();
-        }).catch(e => {
-            log('MAIN ERROR: ' + e.message, true);
-            alert(translations[currentLang].errorGeneric);
-            scanState = 'idle';
-            updateStartBtn();
-            document.getElementById('pauseBtn').style.display = 'none';
-            isPaused = false;
-            setScanUI(false);
-        });
+        return;
     }
+
+    updatePauseBtn();
+    log('RESUMED');
+    const remaining = allProxies.filter(p => !checkedKeys.has(`${p.server}:${p.port}:${p.secret}`));
+    if (remaining.length === 0) {
+        finish();
+        return;
+    }
+    log(`Resuming with ${remaining.length} unchecked...`);
+    runCheckStream(remaining, globalLinkMap).then(r => {
+        if (r === 'done' || r === 'timeout') finish();
+    }).catch(reportScanFailure);
 }
 
 async function runCheckStream(proxies, linkMap) {
@@ -494,11 +496,31 @@ async function runCheckStream(proxies, linkMap) {
     }
 }
 
+// Parse every line, drop the unparseable ones, and dedupe by server:port:secret.
+// Resets skippedCount first — parseLink bumps it for spam secrets, and the count
+// is per-scan.
+function parseProxyList(text) {
+    skippedCount = 0;
+    const parsed = text.split('\n').map(parseLink).filter(l => l !== null);
+
+    const seen = new Set();
+    const unique = parsed.filter(p => {
+        const key = `${p.server}:${p.port}:${p.secret}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    const dupCount = parsed.length - unique.length;
+    if (dupCount > 0) log(`Removed ${dupCount} duplicate entries.`);
+    return unique;
+}
+
 async function startCheck() {
     try {
         const t = translations[currentLang];
         const input = document.getElementById('inputProxies').value;
-        
+
         if (!input) return showToast(t.toastEmpty, true);
 
         isPaused = false;
@@ -506,20 +528,7 @@ async function startCheck() {
         checkedKeys = new Set();
         allProxies = [];
 
-        const lines = input.split('\n');
-        skippedCount = 0;
-        let validLinks = lines.map(parseLink).filter(l => l !== null);
-
-        const seen = new Set();
-        const deduped = validLinks.filter(p => {
-            const key = `${p.server}:${p.port}:${p.secret}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-        const dupCount = validLinks.length - deduped.length;
-        if (dupCount > 0) log(`Removed ${dupCount} duplicate entries.`);
-        validLinks = deduped;
+        const validLinks = parseProxyList(input);
 
         if (validLinks.length === 0) {
             showToast(t.toastNoValid, true);
@@ -533,15 +542,12 @@ async function startCheck() {
         document.getElementById('outputProxies').value = '';
         scheduleResultsRender();
 
-        const total = validLinks.length;
-
         log(`Settings: concurrency=${getConcurrency()}, timeout=${getTimeout()}s`);
 
         scanState = 'scanning';
         updateStartBtn();
-        const pauseBtn = document.getElementById('pauseBtn');
         updatePauseBtn();
-        pauseBtn.style.display = '';
+        document.getElementById('pauseBtn').style.display = '';
 
         // Build lookup: "server:port:secret" → original link
         globalLinkMap = new Map();
@@ -553,7 +559,7 @@ async function startCheck() {
 
         setScanUI(true);
         updateScanSummary();
-        updateUI(0, total);
+        updateUI(0, validLinks.length);
 
         const result = await runCheckStream(allProxies, globalLinkMap);
         if (result === 'done' || result === 'timeout') {
@@ -564,12 +570,7 @@ async function startCheck() {
         }
         // result === 'paused' → togglePause handles resume
     } catch (e) {
-        log(`MAIN ERROR: ${e.message}`, true);
-        alert(translations[currentLang].errorGeneric);
-        scanState = 'idle';
-        updateStartBtn();
-        setScanUI(false);
-        document.getElementById('pauseBtn').style.display = 'none';
+        reportScanFailure(e);
     }
 }
 
@@ -615,35 +616,45 @@ function scheduleResultsRender() {
     });
 }
 
-// Safe DOM only: server/port come from user-pasted URLs — never innerHTML here.
+// Safe DOM only: server/port come from user-pasted URLs, so text goes in through
+// textContent — never innerHTML here.
+function resultCell(className, content) {
+    const td = document.createElement('td');
+    if (className) td.className = className;
+    if (content instanceof Node) td.appendChild(content);
+    else td.textContent = content;
+    return td;
+}
+
+function pingClass(ping) {
+    if (ping < 180) return 'p-fast';
+    if (ping < 300) return 'p-mid';
+    return 'p-slow';
+}
+
 function renderResultsTable() {
     const tbody = document.getElementById('resultsBody');
     const rowCopyLabel = translations[currentLang].rowCopy;
     const frag = document.createDocumentFragment();
     workingProxies.forEach((p, i) => {
-        const tr = document.createElement('tr');
-        const rank = document.createElement('td');
-        rank.className = 'rank';
-        rank.textContent = i + 1;
-        const host = document.createElement('td');
-        host.className = 'host';
-        host.textContent = p.server;
-        const port = document.createElement('td');
-        port.className = 'host';
-        port.textContent = p.port;
-        const ping = document.createElement('td');
         const badge = document.createElement('span');
-        badge.className = 'ping ' + (p.ping < 180 ? 'p-fast' : p.ping < 300 ? 'p-mid' : 'p-slow');
+        badge.className = 'ping ' + pingClass(p.ping);
         badge.textContent = p.ping + ' ms';
-        ping.appendChild(badge);
-        const act = document.createElement('td');
+
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'rowcopy';
         btn.dataset.index = i;
         btn.textContent = rowCopyLabel;
-        act.appendChild(btn);
-        tr.append(rank, host, port, ping, act);
+
+        const tr = document.createElement('tr');
+        tr.append(
+            resultCell('rank', i + 1),
+            resultCell('host', p.server),
+            resultCell('host', p.port),
+            resultCell(null, badge),
+            resultCell(null, btn)
+        );
         frag.appendChild(tr);
     });
     tbody.replaceChildren(frag);
@@ -666,14 +677,9 @@ document.getElementById('resultsBody').addEventListener('click', (e) => {
 
 function finish() {
     const t = translations[currentLang];
-    const pauseBtn = document.getElementById('pauseBtn');
-    scanState = 'idle';
-    updateStartBtn();
-    setScanUI(false);
-    pauseBtn.style.display = 'none';
-    isPaused = false;
+    resetScanUI();
     log('Process finished.');
-    
+
     if (workingProxies.length > 0) {
         showToast(t.toastFound.replace('{n}', workingProxies.length));
         if (document.getElementById('soundCheck').checked) beep();
