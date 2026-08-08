@@ -1,4 +1,5 @@
 import { translations, interpolate } from './i18n.js';
+import { proxyLine, pingClass } from './format.js';
 
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
@@ -423,10 +424,6 @@ function renderStats() {
     document.getElementById('tileSkipped').textContent = skippedCount;
 }
 
-function proxyLine(p) {
-    return `${p.link} # Ping: ${p.ping}ms`;
-}
-
 function updateOutput() {
     workingProxies.sort((a, b) => a.ping - b.ping);
     document.getElementById('outputProxies').value = workingProxies.map(proxyLine).join('\n\n');
@@ -452,12 +449,6 @@ function resultCell(className, content) {
     if (content instanceof Node) td.appendChild(content);
     else td.textContent = content;
     return td;
-}
-
-function pingClass(ping) {
-    if (ping < 180) return 'p-fast';
-    if (ping < 300) return 'p-mid';
-    return 'p-slow';
 }
 
 function renderResultsTable() {
