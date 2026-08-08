@@ -29,6 +29,21 @@ jobs:
 
       - run: npm test
 
+      # The line and branch thresholds are the enforcement behind the "100% line
+      # and branch" claim in SPEC.md and CLAUDE.md — without a gate that number is
+      # documentation, not a guarantee.
+      #
+      # public/js/app.js is excluded because its reported coverage is a measurement
+      # artifact, not a real gap: tests/helpers/dom.js cache-busts every mount with a
+      # ?mount=N specifier, so each mount is a separate module URL to the reporter and
+      # none of them accumulates. Functions are not gated — render.js sits at 85.71%
+      # because showToast()'s own setTimeout callback never runs inside a unit test.
+      #
+      # --test-coverage-lines/-branches need Node >= 22.8; setup-node '22' resolves to
+      # the latest 22.x, so the pin above is enough.
+      - name: Coverage thresholds
+        run: npm run test:coverage:ci
+
   go:
     name: Go tests and formatting
     runs-on: ubuntu-latest

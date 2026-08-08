@@ -12,6 +12,7 @@
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
     "test:watch": "node --test --watch \"tests/unit/**/*.test.js\"",
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=\"public/js/**\" \"tests/unit/**/*.test.js\"",
+    "test:coverage:ci": "node --test --experimental-test-coverage --test-coverage-include=\"public/js/**\" --test-coverage-exclude=\"public/js/app.js\" --test-coverage-lines=100 --test-coverage-branches=100 \"tests/unit/**/*.test.js\"",
     "test:e2e": "playwright test",
     "test:all": "npm run test:unit && npm run test:e2e"
   },
