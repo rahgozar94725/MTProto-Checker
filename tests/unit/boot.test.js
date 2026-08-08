@@ -97,6 +97,57 @@ test('boots with localStorage writes denied and still applies a theme change', a
     }
 });
 
+// The <head> bootstrap is a classic inline script that runs before the
+// stylesheets, so it decides the pre-paint attributes on its own -- app.js only
+// corrects them later, after the module has been fetched and evaluated. The
+// jsdom helper seeds localStorage after constructing the document, which is too
+// late for this script, so it is exercised directly against stub globals.
+function runHeadBootstrap(localStorage) {
+    const html = readFileSync(new URL('../../public/index.html', import.meta.url), 'utf8');
+    const open = html.indexOf('<script>');
+    const source = html.slice(open + '<script>'.length, html.indexOf('</script>', open));
+
+    const root = {
+        lang: '',
+        dir: '',
+        attributes: {},
+        setAttribute(name, value) { this.attributes[name] = value; },
+    };
+    new Function('document', 'localStorage', source)({ documentElement: root }, localStorage);
+    return root;
+}
+
+function storageStub(entries) {
+    return { getItem: (key) => (key in entries ? entries[key] : null) };
+}
+
+test('the <head> bootstrap paints the default locale for an unrecognised one', () => {
+    // Same trigger as the first test in this file: a foreign `lang` on the shared
+    // 127.0.0.1:3000 origin. app.js resolves it to fa, so trusting it here would
+    // paint LTR and then flip to RTL -- exactly the flash the script exists to
+    // prevent. Adding a locale to i18n.js means adding it to this list too.
+    const root = runHeadBootstrap(storageStub({ lang: 'en-US' }));
+
+    assert.equal(root.lang, 'fa');
+    assert.equal(root.dir, 'rtl');
+});
+
+test('the <head> bootstrap keeps a known locale', () => {
+    const root = runHeadBootstrap(storageStub({ lang: 'ru', theme: 'light' }));
+
+    assert.equal(root.lang, 'ru');
+    assert.equal(root.dir, 'ltr');
+    assert.equal(root.attributes['data-theme'], 'light');
+});
+
+test('the <head> bootstrap survives denied storage', () => {
+    const root = runHeadBootstrap({ getItem() { throw new Error('denied'); } });
+
+    // The markup defaults stand; nothing is half-applied.
+    assert.equal(root.attributes['data-theme'], undefined);
+    assert.equal(root.lang, '');
+});
+
 test('binds every control before the first paint', async () => {
     // The regression this file exists for: wiring used to sit after the paint
     // calls, so any throw in the prelude left all eleven controls dead. Asserting

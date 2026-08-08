@@ -11,7 +11,10 @@
         // attributes -- everything else stays in app.js.
         try {
             var r = document.documentElement;
-            var lang = localStorage.getItem('lang') || 'fa';
+            // Mirrors resolveLang() in app.js: a foreign `lang` on this shared
+            // origin would otherwise paint LTR and flip to RTL a moment later.
+            var lang = localStorage.getItem('lang');
+            if (['fa', 'en', 'ru', 'zh'].indexOf(lang) < 0) lang = 'fa';
             r.setAttribute('data-theme', localStorage.getItem('theme') || 'dark');
             r.lang = lang;
             r.dir = lang === 'fa' ? 'rtl' : 'ltr';
