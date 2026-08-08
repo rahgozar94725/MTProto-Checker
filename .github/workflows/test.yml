@@ -1,0 +1,96 @@
+name: Test
+
+# Runs on every push and pull request. Release builds stay in release.yml, which
+# this workflow does not touch.
+#
+# E2E_LIVE is deliberately never set: tests/e2e/live.spec.js talks to the real
+# Telegram network and would make CI depend on external reachability.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  js:
+    name: JS unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm test
+
+  go:
+    name: Go tests and formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - run: go vet ./...
+
+      # -short skips the tests that need network access or testdata/proxies.txt,
+      # which is not in the repository.
+      - run: go test ./... -short
+
+      # gofmt -l prints offending files and exits 0, so the file list is the
+      # failure signal. .gitattributes pins *.go to LF, so this is meaningful
+      # on a Linux runner even for a checkout made on Windows.
+      - name: gofmt
+        run: |
+          files=$(gofmt -l .)
+          if [ -n "$files" ]; then
+            echo "gofmt needs to run on:"
+            echo "$files"
+            exit 1
+          fi
+
+  e2e:
+    name: Playwright e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # The e2e suite boots the real server via `go run .`.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - run: npm ci
+
+      # Chromium is ~190 MiB; the lockfile pins the Playwright version, so it is
+      # the right cache key.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
