@@ -1,6 +1,7 @@
 import { translations, interpolate } from './i18n.js';
 import { proxyLine, pingClass } from './format.js';
 import { parseProxyList, proxyKey, isAcceptedFilename } from './parse.js';
+import { createSSEParser } from './sse.js';
 
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
@@ -244,36 +245,21 @@ async function runCheckStream(proxies, linkMap) {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = '';
+        const parser = createSSEParser();
 
         while (!scanDone) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
+            for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
+                const data = JSON.parse(frame.data);
 
-            const frames = buffer.split('\n\n');
-            buffer = frames.pop();
-
-            for (const frame of frames) {
-                if (!frame.trim()) continue;
-
-                let eventType = '';
-                let dataStr = '';
-                for (const line of frame.split('\n')) {
-                    if (line.startsWith('event: ')) eventType = line.slice(7);
-                    else if (line.startsWith('data: ')) dataStr = line.slice(6);
-                }
-                if (!dataStr) continue;
-
-                const data = JSON.parse(dataStr);
-
-                if (eventType === 'done') {
+                if (frame.event === 'done') {
                     scanDone = true;
                     break;
                 }
 
-                if (eventType === 'progress') {
+                if (frame.event === 'progress') {
                     const currentTotal = baseline + data.completed;
                     updateUI(currentTotal, totalOrig);
 
