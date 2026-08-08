@@ -860,3 +860,20 @@ if (soundCheck) {
         syncSoundUI();
     });
 }
+
+// Every control is bound here rather than through inline onclick/onchange
+// attributes in index.html. This file is loaded as a module, and a module's
+// top-level scope is not window, so an inline attribute could not reach any of
+// these functions. Renaming one now breaks the build loudly instead of silently
+// breaking a button.
+document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+document.getElementById('langSelect').addEventListener('change', (e) => changeLanguage(e.target.value));
+document.getElementById('helpBtn').addEventListener('click', openHelp);
+document.getElementById('startBtn').addEventListener('click', handleStartStop);
+document.getElementById('pauseBtn').addEventListener('click', togglePause);
+document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+document.getElementById('viewTableBtn').addEventListener('click', () => setResultsView('table'));
+document.getElementById('viewTextBtn').addEventListener('click', () => setResultsView('text'));
+document.getElementById('copyBtn').addEventListener('click', copyResults);
+document.getElementById('exportTxtBtn').addEventListener('click', () => exportResults('txt'));
+document.getElementById('exportJsonBtn').addEventListener('click', () => exportResults('json'));
