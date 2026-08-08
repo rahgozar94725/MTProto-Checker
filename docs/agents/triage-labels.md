@@ -12,4 +12,4 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
-Edit the right-hand column to match whatever vocabulary you actually use.
+All five exist on `rahgozar94725/MTProto-Checker`, verified with `gh label list` on 2026-08-09. `wontfix` is GitHub's stock label ("This will not be worked on", white) and predates this config; the other four were created for it. There is no `spec` label — an earlier copy of this file described one, and it is gone.

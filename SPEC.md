@@ -1,7 +1,15 @@
 # Spec: JavaScript test suite for the frontend
 
-Status: **draft — awaiting review**
+Status: **delivered** — merged to `main` 2026-08-08 as PR #20, tip `3b33b76`
 Created: 2026-08-08
+
+The body below is the contract as written *before* the work, kept unedited so the
+success criteria can still be replayed. Read it as history, not as a description of the
+tree: `public/js/script.js` no longer exists (it became `app.js` plus six modules), and
+the `CLAUDE.md` quotes it cites were corrected by the same series. Two things the plan
+did not anticipate are recorded in `CLAUDE.md` rather than here — the boot-order rule
+that the ESM migration made load-bearing, and the coverage gate that turned the 100%
+claims into an enforced threshold.
 
 ## Objective
 
