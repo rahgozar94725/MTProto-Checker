@@ -131,11 +131,20 @@ func decodeSecret(s string) ([]byte, error) {
 // CLAUDE.md for the measurements.
 var sharedSession = &session.StorageMemory{}
 
+// checkOptionsHook is applied to every check's options just before the client
+// is built. It is nil in production and exists for checkproxy_test.go, which
+// needs two things no real check may do: trust the fake server's RSA key
+// instead of Telegram's, and allow a slower key exchange than the 2s a real
+// proxy gets, because the fake server's DH work runs on the same CPU as the
+// test. Do not reach for it to change SessionStorage — see the load-bearing
+// rule on sharedSession.
+var checkOptionsHook func(*telegram.Options)
+
 // newCheckOptions returns client options for one proxy check. All checks share
 // sharedSession deliberately — a real Telegram client also reuses its auth key
 // rather than running a fresh key exchange per connection.
 func newCheckOptions(resolver dcs.Resolver) telegram.Options {
-	return telegram.Options{
+	opts := telegram.Options{
 		Resolver:        resolver,
 		SessionStorage:  sharedSession,
 		DialTimeout:     minTimeoutDuration,
@@ -143,6 +152,10 @@ func newCheckOptions(resolver dcs.Resolver) telegram.Options {
 		NoUpdates:       true,
 		Device:          telegram.DeviceTDesktopWindows(),
 	}
+	if checkOptionsHook != nil {
+		checkOptionsHook(&opts)
+	}
+	return opts
 }
 
 func tcpCheck(server string, port int) error {
