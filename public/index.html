@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MTProto Checker</title>
+    <script>
+        // Applied here, before the stylesheets, because app.js is a deferred module
+        // and runs after the browser can already paint. Without this a stored
+        // light/LTR preference flashes as dark/RTL first. Keep it to these three
+        // attributes -- everything else stays in app.js.
+        try {
+            var r = document.documentElement;
+            var lang = localStorage.getItem('lang') || 'fa';
+            r.setAttribute('data-theme', localStorage.getItem('theme') || 'dark');
+            r.lang = lang;
+            r.dir = lang === 'fa' ? 'rtl' : 'ltr';
+        } catch (e) { /* localStorage denied: the markup defaults stand */ }
+    </script>
     <link rel="stylesheet" href="/css/tokens.css">
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/components.css">
