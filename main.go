@@ -287,20 +287,25 @@ func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func main() {
-	mux := http.NewServeMux()
-
-	recoverMiddleware := func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			defer func() {
-				if rec := recover(); rec != nil {
-					log.Printf("PANIC HTTP %s %s: %v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
-					jsonResponse(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
-				}
-			}()
-			next(w, r)
-		}
+// recoverMiddleware turns a panic in a handler into a 500 with a JSON body,
+// so one bad request cannot take the process down mid-scan.
+func recoverMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("PANIC HTTP %s %s: %v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
+				jsonResponse(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			}
+		}()
+		next(w, r)
 	}
+}
+
+// newMux wires the three endpoints and the embedded static files. Split out of
+// main() so handlers_test.go can drive them with httptest instead of a live
+// listener; main() adds nothing but the server, signals and browser launch.
+func newMux() *http.ServeMux {
+	mux := http.NewServeMux()
 
 	mux.HandleFunc("/check", recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -597,6 +602,12 @@ func main() {
 		log.Fatalf("Failed to embed public directory: %v", err)
 	}
 	mux.Handle("/", http.FileServer(http.FS(embeddedFS)))
+
+	return mux
+}
+
+func main() {
+	mux := newMux()
 
 	addr := resolveAddr(os.Getenv("HOST"), os.Getenv("PORT"))
 	log.Printf("MTProto Checker %s", version)
