@@ -102,12 +102,21 @@ export function collect(texts) {
     return { universe, perSource };
 }
 
-// Ascending `seen`, tie-broken by key. File order is scan order on the server, so the
-// proxies Phase 0 measured as most likely to work come first; the tie-break keeps the
-// nightly diff readable.
+// Descending `seen`, tie-broken ascending by key. File order is scan order on the server,
+// so the proxies most likely to work come first; the tie-break keeps the nightly diff
+// readable.
+//
+// The direction is measured, and it has been measured both ways. Phase 0 (2026-08-09) found
+// redundancy anti-predicting liveness and this sort was ascending because of it. The
+// 2026-08-10 re-scan did not reproduce that: two warm runs over the same 784-proxy universe
+// both show a monotonic gradient the other way — `seen<=2` at 15–24 % working, `seen>=5` at
+// 81–100 %. The deciding variable turned out to be session warmth, not the data: the Phase 0
+// regime was a cold `sharedSession`, which in the same slot also produced a 1/785 outlier
+// against 303/785 warm on identical input. Re-measure with both arms in one warm session
+// before flipping this back.
 export function snapshotLines(universe) {
     return [...universe.entries()]
-        .sort((a, b) => a[1].srcs.length - b[1].srcs.length || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+        .sort((a, b) => b[1].srcs.length - a[1].srcs.length || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
         .map(([, entry]) => formatLine(entry.link, entry.srcs));
 }
 

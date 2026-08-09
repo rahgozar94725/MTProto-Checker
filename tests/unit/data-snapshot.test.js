@@ -41,3 +41,18 @@ test('the placeholder links carry no attribution fragment', () => {
     const offenders = snapshot.links.filter(link => link.includes('#'));
     assert.deepEqual(offenders, []);
 });
+
+// The placeholder is hand-written, so nothing else keeps it in the order snapshotLines()
+// emits. File order is scan order, and the sort is descending by `seen` — a placeholder in
+// the old ascending order would model the wrong grammar for anyone reading it as the example.
+test('the placeholder is ordered descending by seen, like a real build', () => {
+    // Matched on the metadata, not on `tg://` — a real build also emits `https://t.me/proxy…`
+    // lines, because parse.js preserves whichever form the source used.
+    const seen = text
+        .split('\n')
+        .filter(line => !line.startsWith('#') && line.includes('#seen='))
+        .map(line => Number(/#seen=(\d+);/.exec(line)[1]));
+
+    assert.ok(seen.length > 1, 'needs at least two links to have an order');
+    assert.deepEqual(seen, [...seen].sort((a, b) => b - a));
+});
