@@ -1,0 +1,4 @@
+# synthetic source 2 — RFC 5737 documentation addresses only, no live proxy
+tg://proxy?server=192.0.2.10&port=443&secret=ee0102030405060708090a0b0c0d0e0f10
+tg://proxy?server=203.0.113.9&port=2053&secret=eeffeeffeeffeeffeeffeeffeeffeeff
+tg://proxy?server=203.0.113.44&port=443&secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAA
