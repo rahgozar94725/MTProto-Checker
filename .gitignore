@@ -9,6 +9,9 @@ RELEASE_NOTES.md
 # Local-only helper script
 filter.sh
 
+# Default output of scripts/build-snapshot.mjs — real proxy links, built in CI, never committed
+/snapshot.txt
+
 # Agent-local notes, not shared with the team
 .claude.local.md
 

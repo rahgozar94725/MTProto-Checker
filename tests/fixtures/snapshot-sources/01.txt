@@ -1,0 +1,4 @@
+# synthetic source 1 — RFC 5737 documentation addresses only, no live proxy
+tg://proxy?server=192.0.2.10&port=443&secret=ee0102030405060708090a0b0c0d0e0f10
+tg://proxy?server=198.51.100.7&port=443&secret=ee1112131415161718191a1b1c1d1e1f20# MTProto EU (100)
+tg://proxy?server=203.0.113.5&port=99999&secret=eeaabb00112233445566778899aabbcc
