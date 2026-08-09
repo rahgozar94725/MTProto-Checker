@@ -5,9 +5,14 @@ name: Test
 #
 # E2E_LIVE is deliberately never set: tests/e2e/live.spec.js talks to the real
 # Telegram network and would make CI depend on external reachability.
+#
+# `snapshot` is ignored because snapshot.yml force-pushes a bot commit there every
+# night; that branch holds one generated text file and no code to test.
 
 on:
   push:
+    branches-ignore:
+      - snapshot
   pull_request:
 
 permissions:
