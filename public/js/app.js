@@ -9,6 +9,7 @@ import {
     showToast as paintToast,
 } from './render.js';
 import { createScanState } from './state.js';
+import { parseSnapshot } from './snapshot.js';
 
 // All mutable scan state lives here; nothing below declares its own.
 const state = createScanState();
@@ -123,6 +124,7 @@ function changeLanguage(lang) {
     setLanguage(lang);
     updatePauseBtn();
     updateStartBtn();
+    renderSnapshotMeta();
     if (state.scanState === 'scanning') updateScanSummary();
     scheduleResultsRender();
 }
@@ -506,6 +508,53 @@ function syncSoundUI() {
     el.className = 'sound-state ' + (on ? 'on' : 'off');
 }
 
+// The list baked into the binary by //go:embed. Fetched, never read from disk, so this
+// works the same whether the page is served by `go run .` or by a released binary.
+const SNAPSHOT_URL = '/data/snapshot.txt';
+
+// The ISO timestamp off the snapshot header, '' until a load succeeds. Kept here rather
+// than in the DOM so a language change can re-render the date in the new locale.
+let snapshotGeneratedAt = '';
+
+function renderSnapshotMeta() {
+    const el = document.getElementById('snapshotMeta');
+    if (!snapshotGeneratedAt) {
+        el.textContent = '';
+        return;
+    }
+    const date = new Date(snapshotGeneratedAt);
+    // A header this file cannot parse still gets shown -- raw beats blank, and the
+    // snapshot's links are unaffected by a malformed timestamp.
+    const shown = Number.isNaN(date.getTime())
+        ? snapshotGeneratedAt
+        : date.toLocaleDateString(currentLang, { year: 'numeric', month: 'long', day: 'numeric' });
+    el.textContent = interpolate(translations[currentLang].snapshotDate, { date: shown });
+}
+
+async function loadSnapshot() {
+    const t = translations[currentLang];
+    try {
+        const response = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        // parseSnapshot is total, so an unusable file arrives as zero links rather than a
+        // throw -- which is still a failed load from the user's point of view.
+        const { generatedAt, links } = parseSnapshot(await response.text());
+        if (links.length === 0) throw new Error('no links in snapshot');
+
+        document.getElementById('inputProxies').value = links.join('\n');
+        snapshotGeneratedAt = generatedAt;
+        renderSnapshotMeta();
+        log(`Loaded ${links.length} links from the built-in list.`);
+        showToast(interpolate(t.toastSnapshotLoaded, { n: links.length }));
+    } catch (err) {
+        // The textarea is deliberately left alone: a failed load must not cost the user
+        // whatever they had already pasted.
+        log(`SNAPSHOT ERROR: ${err.message}`, true);
+        showToast(t.toastSnapshotFailed, true);
+    }
+}
+
 function readProxyFile(file) {
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -620,6 +669,7 @@ document.getElementById('helpBtn').addEventListener('click', openHelp);
 document.getElementById('startBtn').addEventListener('click', handleStartStop);
 document.getElementById('pauseBtn').addEventListener('click', togglePause);
 document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+document.getElementById('loadListBtn').addEventListener('click', loadSnapshot);
 document.getElementById('viewTableBtn').addEventListener('click', () => applyResultsView(document, 'table'));
 document.getElementById('viewTextBtn').addEventListener('click', () => applyResultsView(document, 'text'));
 document.getElementById('copyBtn').addEventListener('click', copyResults);

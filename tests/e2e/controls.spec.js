@@ -4,7 +4,7 @@
 // addEventListener calls at the bottom of app.js, and a dropped or misspelled line there is
 // invisible to every other layer of the suite: the unit tests import the modules directly,
 // and jsdom cannot execute <script type="module"> at all. Only a real browser loading the
-// real page proves the wiring survived — so each of the eleven controls below gets an
+// real page proves the wiring survived — so each of the twelve controls below gets an
 // assertion on an effect the user can see.
 //
 // Expected labels come from public/js/i18n.js rather than from literals; locale parity is
@@ -153,6 +153,32 @@ test.describe('every migrated control still fires', () => {
 
         await expect(page.locator('#inputProxies')).toHaveValue(`${LINK}\n`);
         await expect(page.locator('#console')).toContainText('Loaded file: proxies.txt');
+
+        expect(errors).toEqual([]);
+    });
+
+    test('#loadListBtn fills the textarea from the embedded snapshot', async ({ page }) => {
+        const errors = collectErrors(page);
+        await page.goto('/');
+
+        // Nothing is shown before a load: the date line collapses to nothing.
+        await expect(page.locator('#snapshotMeta')).toHaveText('');
+
+        // No route stub — /data/snapshot.txt comes off the //go:embed tree, which is the
+        // whole point of the button. The count is left to the file; the shape is not.
+        await page.locator('#loadListBtn').click();
+        await expect(page.locator('#inputProxies')).not.toHaveValue('');
+
+        const lines = (await page.locator('#inputProxies').inputValue()).split('\n');
+        expect(lines.length).toBeGreaterThan(0);
+        for (const line of lines) {
+            expect(line).toMatch(/^tg:\/\/proxy\?server=/);
+            expect(line).not.toContain('#seen=');
+        }
+
+        await expect(page.locator('#toast')).toHaveClass('toast show success');
+        await expect(page.locator('#snapshotMeta')).not.toHaveText('');
+        await expect(page.locator('#console')).toContainText('links from the built-in list');
 
         expect(errors).toEqual([]);
     });

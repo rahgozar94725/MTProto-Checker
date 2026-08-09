@@ -43,7 +43,11 @@ export const translations = {
         toastBadFileType: "⛔ نوع فایل پشتیبانی نمی‌شود — از txt یا csv یا list استفاده کنید",
         toastMultiFile: "⚠️ فقط یک فایل رها کنید",
         emptyHint: "لینک‌های پروکسی را اینجا جای‌گذاری کنید — هر خط یک لینک — یا فایل انتخاب کنید",
-        activityLog: "گزارش فعالیت"
+        activityLog: "گزارش فعالیت",
+        loadListBtn: "بارگذاری لیست",
+        snapshotDate: "لیست داخلی — {date}",
+        toastSnapshotLoaded: "✅ {n} لینک از لیست داخلی بارگذاری شد!",
+        toastSnapshotFailed: "⛔ بارگذاری لیست داخلی ناموفق بود"
     },
     en: {
         title: "MTProto Checker",
@@ -86,7 +90,11 @@ export const translations = {
         toastBadFileType: "⛔ Unsupported file type — use .txt, .csv or .list",
         toastMultiFile: "⚠️ Drop a single file",
         emptyHint: "Paste proxy links here — one per line — or load a file",
-        activityLog: "Activity log"
+        activityLog: "Activity log",
+        loadListBtn: "Load list",
+        snapshotDate: "Built-in list — {date}",
+        toastSnapshotLoaded: "✅ Loaded {n} links from the built-in list!",
+        toastSnapshotFailed: "⛔ Could not load the built-in list"
     },
     ru: {
         title: "MTProto Checker",
@@ -129,7 +137,11 @@ export const translations = {
         toastBadFileType: "⛔ Неподдерживаемый тип файла — используйте .txt, .csv или .list",
         toastMultiFile: "⚠️ Перетащите только один файл",
         emptyHint: "Вставьте ссылки на прокси — по одной в строке — или загрузите файл",
-        activityLog: "Журнал активности"
+        activityLog: "Журнал активности",
+        loadListBtn: "Загрузить список",
+        snapshotDate: "Встроенный список — {date}",
+        toastSnapshotLoaded: "✅ Загружено {n} ссылок из встроенного списка!",
+        toastSnapshotFailed: "⛔ Не удалось загрузить встроенный список"
     },
     zh: {
         title: "MTProto Checker",
@@ -172,7 +184,11 @@ export const translations = {
         toastBadFileType: "⛔ 不支持的文件类型 — 请使用 .txt、.csv 或 .list",
         toastMultiFile: "⚠️ 一次只能拖放一个文件",
         emptyHint: "在此粘贴代理链接（每行一个），或加载文件",
-        activityLog: "活动日志"
+        activityLog: "活动日志",
+        loadListBtn: "加载列表",
+        snapshotDate: "内置列表 — {date}",
+        toastSnapshotLoaded: "✅ 已从内置列表加载 {n} 条链接!",
+        toastSnapshotFailed: "⛔ 无法加载内置列表"
     }
 };
 
