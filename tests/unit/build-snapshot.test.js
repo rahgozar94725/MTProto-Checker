@@ -98,15 +98,27 @@ test('a source-side comment fragment never reaches the emitted line', () => {
     assert.ok(!line.includes('MTProto EU'), line);
 });
 
-test('snapshotLines sorts ascending by seen, then by key', () => {
+// Descending, not ascending: file order is scan order, and the 2026-08-10 re-scan measured
+// `seen>=5` at 81–100 % working against `seen<=2` at 15–24 %. Phase 0 measured the opposite
+// and it did not reproduce — see the Phase 0b section of the plan.
+test('snapshotLines sorts descending by seen, then ascending by key', () => {
     const { universe } = collect(TEXTS);
 
     assert.deepEqual(snapshotLines(universe).map(l => l.slice(l.indexOf('#') + 1)), [
+        'seen=3;src=0,1,2',
         'seen=1;src=0',
         'seen=1;src=1',
         'seen=1;src=2',
-        'seen=3;src=0,1,2',
     ]);
+});
+
+test('snapshotLines keeps the key tie-break ascending within one seen bucket', () => {
+    const { universe } = collect(TEXTS);
+    const keysAtSeen1 = snapshotLines(universe)
+        .filter(l => l.includes('#seen=1;'))
+        .map(l => l.slice(0, l.indexOf('#')));
+
+    assert.deepEqual(keysAtSeen1, [...keysAtSeen1].sort());
 });
 
 test('buildSnapshot writes the generation timestamp and one line per source', () => {
