@@ -37,6 +37,18 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      # The orphan `snapshot` branch holds one file, rebuilt nightly. It has to land in
+      # public/data/ before the compiler runs, because //go:embed reads the working tree —
+      # a release built without this step ships the committed placeholder instead.
+      # --fail is what turns a deleted branch or a renamed file into a red job rather than
+      # a silently placeholder-shipping release; without it curl saves the 404 body and
+      # exits 0. Nothing is committed back: the overwrite lives in the runner's checkout.
+      - name: Fetch the nightly snapshot
+        run: |
+          curl --fail --silent --show-error --location \
+            -o public/data/snapshot.txt \
+            "https://raw.githubusercontent.com/${{ github.repository }}/snapshot/snapshot.txt"
+
       - name: Build
         run: |
           go build -ldflags="-X main.version=${{ github.ref_name }}" \

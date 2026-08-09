@@ -49,6 +49,32 @@ test('snapshot.yml asks for contents: write and nothing else', () => {
     );
 });
 
+// `//go:embed public` reads the working tree at compile time, so the only window in which
+// a release binary can pick up the nightly snapshot is between checkout and `go build`.
+// Nothing else fails if the step is dropped or reordered: the build stays green and every
+// binary ships the committed placeholder instead.
+test('release.yml bakes the nightly snapshot in before it builds', () => {
+    const text = workflow('release.yml');
+    const fetchAt = text.indexOf('public/data/snapshot.txt');
+    const buildAt = text.indexOf('go build');
+
+    assert.notEqual(fetchAt, -1, 'without the fetch every release ships the committed placeholder');
+    assert.notEqual(buildAt, -1, 'release.yml no longer builds');
+    assert.ok(fetchAt < buildAt, '//go:embed reads public/ at compile time — the fetch has to come first');
+    assert.match(text, /curl[^\n]*--fail/,
+        'without --fail curl saves the 404 body over the snapshot and exits 0');
+    assert.match(text, /raw\.githubusercontent\.com\/\$\{\{ github\.repository \}\}\/snapshot\/snapshot\.txt/,
+        'the snapshot branch holds the file at its root');
+});
+
+// A moving ref here would let the workflow repository repoint this project at code it
+// never reviewed, and a release is exactly where that would land.
+test('release.yml pins the publishing workflow by SHA', () => {
+    const text = workflow('release.yml');
+
+    assert.match(text, /^\s+uses: rahgozar94725\/release-workflows\/\.github\/workflows\/release\.yml@[0-9a-f]{40}\b/m);
+});
+
 test('test.yml ignores pushes to the snapshot branch', () => {
     const on = triggerBlock(workflow('test.yml'));
 
