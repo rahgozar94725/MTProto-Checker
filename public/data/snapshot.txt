@@ -1,0 +1,12 @@
+# PLACEHOLDER — synthetic snapshot. Every address is RFC 5737 documentation space and no
+# link here is a live proxy. release.yml overwrites this file with the nightly build from
+# the `snapshot` branch before `go build`, so a released binary carries the real list.
+# generated 2026-08-09T00:00:00.000Z by scripts/build-snapshot.mjs
+# 0 example.invalid/placeholder/list-a.txt
+# 1 example.invalid/placeholder/list-b.txt
+tg://proxy?server=192.0.2.10&port=443&secret=ee1a2b3c4d5e6f708192a3b4c5d6e7f8#seen=1;src=0
+tg://proxy?server=192.0.2.11&port=8443&secret=ee2b3c4d5e6f708192a3b4c5d6e7f809#seen=1;src=0
+tg://proxy?server=198.51.100.20&port=443&secret=ee3c4d5e6f708192a3b4c5d6e7f8091a#seen=1;src=1
+tg://proxy?server=203.0.113.30&port=443&secret=ee4d5e6f708192a3b4c5d6e7f8091a2b#seen=1;src=1
+tg://proxy?server=192.0.2.12&port=443&secret=ee5e6f708192a3b4c5d6e7f8091a2b3c#seen=2;src=0,1
+tg://proxy?server=203.0.113.31&port=8443&secret=ee6f708192a3b4c5d6e7f8091a2b3c4d#seen=2;src=0,1
