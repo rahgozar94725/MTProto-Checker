@@ -114,12 +114,17 @@
         <div class="btn-row">
             <button class="btn-start" id="startBtn">شروع بررسی</button>
             <button class="btn-pause" id="pauseBtn" style="display:none">توقف موقت</button>
+            <button class="btn-load" id="loadListBtn">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>
+                <span data-i18n="loadListBtn">بارگذاری لیست</span>
+            </button>
             <label class="btn-file">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                 <span data-i18n="fileBtn">فایل</span>
                 <input type="file" id="fileInput" accept=".txt,.csv,.list" style="display:none">
             </label>
         </div>
+        <div class="snapshot-meta" id="snapshotMeta"></div>
     </div>
 
     <div class="results" id="resultsPanel" data-view="table">

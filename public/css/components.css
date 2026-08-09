@@ -583,17 +583,28 @@ button:active:not(:disabled),
     background: linear-gradient(135deg, rgba(217,119,6,0.92), rgba(180,83,9,0.92));
 }
 
-.btn-file {
+/* Secondary input actions: same family as the primary start button, dimmed, so
+   picking a file or pulling the built-in list never outshouts Start. */
+.btn-file, .btn-load {
     background: linear-gradient(135deg, rgba(59,130,246,0.75), rgba(99,102,241,0.75));
     border-color: rgba(255,255,255,0.08);
 }
-.btn-file:hover {
+.btn-file:hover, .btn-load:hover {
     background: linear-gradient(135deg, rgba(37,99,235,0.88), rgba(79,70,229,0.88));
     border-color: rgba(255,255,255,0.15);
 }
-[data-theme="light"] .btn-file {
+[data-theme="light"] .btn-file,
+[data-theme="light"] .btn-load {
     background: linear-gradient(135deg, rgba(37,99,235,0.85), rgba(79,70,229,0.85));
     border-color: rgba(0,0,0,0.06);
+}
+
+/* Empty until a snapshot loads, so it collapses to nothing on a fresh page. */
+.snapshot-meta {
+    margin-top: var(--space-2);
+    color: var(--muted);
+    font-size: var(--text-sm);
+    text-align: center;
 }
 
 .btn-stop {

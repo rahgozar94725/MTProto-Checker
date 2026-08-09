@@ -66,6 +66,39 @@ function respondWith(text) {
     };
 }
 
+// The snapshot the Load-list button fetches. Two links, RFC 5737 addresses, and the
+// `#seen=…;src=…` fragment the writer appends — which is exactly what must never reach the
+// textarea, an export or the clipboard.
+const SNAPSHOT_SECRETS = ['ee1a2b3c4d5e6f708192a3b4c5d6e7f8', 'ee2b3c4d5e6f708192a3b4c5d6e7f809'];
+const SNAPSHOT_LINKS = [
+    link('192.0.2.10', 443, SNAPSHOT_SECRETS[0]),
+    link('198.51.100.20', 8443, SNAPSHOT_SECRETS[1]),
+];
+const SNAPSHOT_GENERATED_AT = '2026-08-09T03:17:00.000Z';
+const SNAPSHOT_TEXT = [
+    `# generated ${SNAPSHOT_GENERATED_AT} by scripts/build-snapshot.mjs`,
+    '# 0 example.invalid/list-a.txt',
+    '# 1 example.invalid/list-b.txt',
+    `${SNAPSHOT_LINKS[0]}#seen=1;src=0`,
+    `${SNAPSHOT_LINKS[1]}#seen=2;src=0,1`,
+    '',
+].join('\n');
+
+// Routes /data/snapshot.txt to a text response and everything else to the scan stub.
+function respondToSnapshot(snapshot, scan = respondWith('')) {
+    return async (url, init) => {
+        if (String(url).includes('snapshot.txt')) {
+            if (snapshot === null) return { ok: false, status: 404, text: async () => '' };
+            return { ok: true, status: 200, text: async () => snapshot };
+        }
+        return scan(url, init);
+    };
+}
+
+function localizedDate(lang, iso) {
+    return new Date(iso).toLocaleDateString(lang, { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
 // Hands every request back to the test, so a scan can be held open mid-flight.
 function respondManually(requests) {
     return async (_url, init) => {
@@ -285,6 +318,94 @@ test('finishing with a working proxy toasts the count and beeps when sound is on
         assert.equal(toastText(app), interpolate(fa.toastFound, { n: 1 }));
         assert.doesNotMatch(app.document.getElementById('toast').className, /error/);
         assert.equal(app.recorded.audioContexts, 1);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('the load-list button fills the input with fragment-free links and shows the date', async () => {
+    const app = await mountApp({ fetch: respondToSnapshot(SNAPSHOT_TEXT) });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), SNAPSHOT_LINKS);
+        assert.doesNotMatch(app.document.getElementById('inputProxies').value, /#seen=/);
+        assert.equal(app.recorded.fetches[0].url, '/data/snapshot.txt');
+
+        // The generation date is on the page without opening anything, in the active locale.
+        assert.equal(
+            app.document.getElementById('snapshotMeta').textContent,
+            interpolate(fa.snapshotDate, { date: localizedDate('fa', SNAPSHOT_GENERATED_AT) })
+        );
+
+        // …and follows a language change, since it is written by JS, not by [data-i18n].
+        const langSelect = app.document.getElementById('langSelect');
+        langSelect.value = 'ru';
+        langSelect.dispatchEvent(new app.window.Event('change'));
+        assert.equal(
+            app.document.getElementById('snapshotMeta').textContent,
+            interpolate(translations.ru.snapshotDate, { date: localizedDate('ru', SNAPSHOT_GENERATED_AT) })
+        );
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a failed snapshot fetch toasts, logs an error, and leaves the textarea untouched', async () => {
+    const app = await mountApp({ fetch: respondToSnapshot(null) });
+    try {
+        paste(app, link('192.0.2.99'));
+        click(app, 'loadListBtn');
+        await waitFor(() => toastText(app) !== '', 'the failure toast');
+
+        assert.equal(toastText(app), fa.toastSnapshotFailed);
+        assert.match(app.document.getElementById('toast').className, /error/);
+        assert.equal(app.document.getElementById('inputProxies').value, link('192.0.2.99'),
+            'a failed load must not cost the user their paste');
+        assert.equal(app.document.getElementById('snapshotMeta').textContent, '');
+
+        const errors = [...app.document.querySelectorAll('#console .error-log')];
+        assert.equal(errors.length, 1, 'one error line, not a stack of them');
+        assert.match(errors[0].textContent, /SNAPSHOT ERROR/);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a snapshot-fed scan exports and copies with no #seen= anywhere', async () => {
+    const stream = body([
+        progress({ server: '192.0.2.10', secret: SNAPSHOT_SECRETS[0], ok: true, ping: 90, completed: 1, total: 2, working: 1 }),
+        progress({ server: '198.51.100.20', port: 8443, secret: SNAPSHOT_SECRETS[1], ok: true, ping: 140, completed: 2, total: 2, working: 2 }),
+        doneFrame({ completed: 2 }),
+    ]);
+    const app = await mountApp({ fetch: respondToSnapshot(SNAPSHOT_TEXT, respondWith(stream)) });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        click(app, 'startBtn');
+        await waitFor(() => isIdle(app), 'the scan to finish');
+        app.flushFrames();
+
+        assert.equal(rows(app).length, 2);
+        assert.doesNotMatch(app.document.getElementById('outputProxies').value, /#seen=/);
+
+        click(app, 'exportTxtBtn');
+        click(app, 'exportJsonBtn');
+        assert.equal(app.recorded.objectURLs.length, 2);
+        const [txt, json] = await Promise.all(app.recorded.objectURLs.map(o => o.blob.text()));
+
+        assert.doesNotMatch(txt, /#seen=/);
+        assert.doesNotMatch(json, /#seen=/);
+        assert.ok(txt.includes(SNAPSHOT_LINKS[0]), 'the exported link is the published one');
+        assert.deepEqual(JSON.parse(json).map(p => p.link), [SNAPSHOT_LINKS[0], SNAPSHOT_LINKS[1]]);
+
+        app.document.querySelector('#resultsBody .rowcopy').click();
+        await tick();
+        assert.equal(app.recorded.clipboard.length, 1);
+        assert.doesNotMatch(app.recorded.clipboard[0], /#seen=/);
+        assert.ok(app.recorded.clipboard[0].startsWith(SNAPSHOT_LINKS[0]));
     } finally {
         app.cleanup();
     }
