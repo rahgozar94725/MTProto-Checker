@@ -34,8 +34,22 @@ test('public/ carries no npm manifests or dependencies', () => {
     assert.deepEqual(offenders, [], 'these would be embedded into the release binary');
 });
 
-test('the embedded tree is only html, css, js and fonts', () => {
-    const allowed = /\.(html|css|js|woff2|png|svg|ico)$/;
-    const offenders = publicFiles.filter(f => !allowed.test(f));
+// public/data/snapshot.txt is the one data file the embed carries on purpose: the
+// placeholder proxy snapshot a fresh clone serves at /data/snapshot.txt, overwritten by
+// release.yml at build time. The entry is deliberately narrow — a .txt elsewhere under
+// public/, or a non-.txt under public/data/, is still an offender.
+const CODE_AND_ASSETS = /\.(html|css|js|woff2|png|svg|ico)$/;
+const DATA_SNAPSHOT = /^public\/data\/[^/]+\.txt$/;
+const isEmbeddable = f => CODE_AND_ASSETS.test(f) || DATA_SNAPSHOT.test(f);
+
+test('the embedded tree is only html, css, js, fonts and public/data/*.txt', () => {
+    const offenders = publicFiles.filter(f => !isEmbeddable(f));
     assert.deepEqual(offenders, []);
+});
+
+test('the data allowlist admits public/data/*.txt and nothing broader', () => {
+    assert.equal(isEmbeddable('public/data/snapshot.txt'), true);
+    assert.equal(isEmbeddable('public/js/notes.txt'), false);
+    assert.equal(isEmbeddable('public/data/nested/other.txt'), false);
+    assert.equal(isEmbeddable('public/data/proxies.csv'), false);
 });
