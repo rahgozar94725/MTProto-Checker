@@ -1,0 +1,57 @@
+name: Snapshot
+
+# Rebuilds the proxy-source snapshot nightly and force-pushes it, as a single commit,
+# to the orphan branch `snapshot`. Release builds curl that branch into public/data/
+# before compiling, so the binary ships a snapshot no older than the release.
+#
+# Deliberately no `push` trigger: the snapshot is a function of the 17 remote source
+# lists, not of this repository's contents, so a commit here is not a reason to rebuild.
+# The other half of that containment lives in test.yml, whose push trigger ignores the
+# `snapshot` branch — without it every nightly bot commit would run the whole matrix.
+# tests/unit/workflows.test.js guards both halves.
+
+on:
+  schedule:
+    # 03:17 UTC — off the hour, where GitHub's scheduler is least contended.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and publish the snapshot
+    runs-on: ubuntu-latest
+    steps:
+      # The push below uses an explicit token from a repository this checkout does not
+      # own, so the checkout's own credentials are dead weight.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No `npm ci`: the script imports public/js/parse.js and node builtins, nothing else.
+      # It exits non-zero if any source is non-200 or yields no parseable link, which is
+      # the intended failure — a silently smaller snapshot is worse than a red run.
+      - name: Build the snapshot
+        run: node scripts/build-snapshot.mjs "$RUNNER_TEMP/snapshot.txt"
+
+      # Built in a throwaway repository rather than an orphan branch of this checkout, so
+      # the published branch cannot pick up a stray working-tree file: `git add` names the
+      # one file, and a fresh history means every push is exactly one commit.
+      - name: Force-push to the snapshot branch
+        working-directory: ${{ runner.temp }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git init -q -b snapshot
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add snapshot.txt
+          git commit -q -m "chore(snapshot): rebuild $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" snapshot
