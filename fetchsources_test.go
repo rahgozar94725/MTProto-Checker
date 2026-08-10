@@ -8,14 +8,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+// allowLoopbackDestinations exempts loopback from the destination check for one
+// test, and nothing else — the scheme allowlist still applies, so a plain-HTTP
+// source is still rejected on the direct path. That is what lets the SOCKS5
+// tests below prove the fallback was taken rather than the direct attempt.
+func allowLoopbackDestinations(t *testing.T) {
+	t.Helper()
+	orig := allowedSourceIP
+	allowedSourceIP = func(ip net.IP) bool { return ip.IsLoopback() }
+	t.Cleanup(func() { allowedSourceIP = orig })
+}
 
 // allowLoopbackSources relaxes the SSRF policy for one test: plain HTTP, and
 // loopback destinations only. That is exactly what an httptest server on
@@ -23,12 +36,10 @@ import (
 // 10.0.0.1 is rejected, which is what makes the redirect test meaningful.
 func allowLoopbackSources(t *testing.T) {
 	t.Helper()
-	origScheme, origIP := allowPlainHTTPSources, allowedSourceIP
+	allowLoopbackDestinations(t)
+	orig := allowPlainHTTPSources
 	allowPlainHTTPSources = true
-	allowedSourceIP = func(ip net.IP) bool { return ip.IsLoopback() }
-	t.Cleanup(func() {
-		allowPlainHTTPSources, allowedSourceIP = origScheme, origIP
-	})
+	t.Cleanup(func() { allowPlainHTTPSources = orig })
 }
 
 // fetchSources posts a {"urls": …} body built from urls and returns the
@@ -208,13 +219,12 @@ func TestFetchSourcesRejectsAnOversizedSourceWithoutBufferingIt(t *testing.T) {
 	}
 }
 
-// https only. http stays rejected until Task 13 routes it through SOCKS5.
+// https only on the direct path. Plain HTTP is allowed only through SOCKS5,
+// which is a separate client — see the SOCKS5 tests below.
 func TestFetchSourceRejectsPlainHTTP(t *testing.T) {
-	orig := allowedSourceIP
-	allowedSourceIP = func(ip net.IP) bool { return ip.IsLoopback() }
-	t.Cleanup(func() { allowedSourceIP = orig })
+	allowLoopbackDestinations(t)
 
-	_, err := fetchSource(context.Background(), "http://127.0.0.1:9/list.txt")
+	_, err := fetchSource(context.Background(), nil, "http://127.0.0.1:9/list.txt")
 
 	if err == nil {
 		t.Fatal("fetchSource accepted an http:// source, want it rejected")
@@ -233,7 +243,7 @@ func TestFetchSourceRejectsANonHTTPScheme(t *testing.T) {
 		"gopher://example.com/",
 		"tg://proxy?server=192.0.2.1",
 	} {
-		if _, err := fetchSource(context.Background(), raw); err == nil {
+		if _, err := fetchSource(context.Background(), nil, raw); err == nil {
 			t.Errorf("fetchSource(%q) = nil error, want it rejected", raw)
 		}
 	}
@@ -251,7 +261,7 @@ func TestFetchSourceRejectsAPrivateDestination(t *testing.T) {
 		"https://172.16.0.1/list.txt",
 		"https://169.254.169.254/latest/meta-data/",
 	} {
-		_, err := fetchSource(context.Background(), raw)
+		_, err := fetchSource(context.Background(), nil, raw)
 		if err == nil {
 			t.Errorf("fetchSource(%q) = nil error, want it rejected", raw)
 			continue
@@ -265,7 +275,7 @@ func TestFetchSourceRejectsAPrivateDestination(t *testing.T) {
 // Loopback is blocked by the same check — the hermetic tests reach 127.0.0.1
 // only because they exempt it explicitly.
 func TestFetchSourceRejectsALoopbackDestination(t *testing.T) {
-	_, err := fetchSource(context.Background(), "https://127.0.0.1:9/list.txt")
+	_, err := fetchSource(context.Background(), nil, "https://127.0.0.1:9/list.txt")
 
 	if err == nil {
 		t.Fatal("fetchSource accepted a loopback source, want it rejected")
@@ -286,7 +296,7 @@ func TestFetchSourceDoesNotFollowARedirectToAPrivateDestination(t *testing.T) {
 	}))
 	t.Cleanup(redirect.Close)
 
-	text, err := fetchSource(context.Background(), redirect.URL+"/list.txt")
+	text, err := fetchSource(context.Background(), nil, redirect.URL+"/list.txt")
 
 	if err == nil {
 		t.Fatalf("followed the redirect and returned %q, want an error", text)
@@ -324,5 +334,288 @@ func TestFetchSourcesBoundsEachSourceWithATimeout(t *testing.T) {
 	}
 	if elapsed > 5*time.Second {
 		t.Errorf("took %v — the per-source timeout did not bound the fetch", elapsed)
+	}
+}
+
+// socks5Server is a minimal RFC 1928 CONNECT proxy on 127.0.0.1: enough to
+// prove which path a fetch took and where it asked to go, and nothing more. It
+// counts accepted connections and records every requested destination, so a
+// test can assert the proxy was reached — or that it never was.
+type socks5Server struct {
+	addr string
+
+	mu    sync.Mutex
+	conns int
+	dests []string
+}
+
+func (s *socks5Server) connections() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conns
+}
+
+func (s *socks5Server) destinations() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.dests...)
+}
+
+// startSOCKS5 runs the proxy until the test ends. An empty user means the
+// no-authentication method; otherwise the username/password method of RFC 1929
+// is demanded and the credentials are checked.
+func startSOCKS5(t *testing.T, user, pass string) *socks5Server {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	s := &socks5Server{addr: ln.Addr().String()}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go s.serve(conn, user, pass)
+		}
+	}()
+	return s
+}
+
+func (s *socks5Server) serve(conn net.Conn, user, pass string) {
+	defer conn.Close()
+	s.mu.Lock()
+	s.conns++
+	s.mu.Unlock()
+
+	buf := make([]byte, 260)
+	read := func(n int) bool {
+		_, err := io.ReadFull(conn, buf[:n])
+		return err == nil
+	}
+
+	// Greeting: version, method count, then that many method bytes.
+	if !read(2) {
+		return
+	}
+	if !read(int(buf[1])) {
+		return
+	}
+	if user == "" {
+		if _, err := conn.Write([]byte{0x05, 0x00}); err != nil {
+			return
+		}
+	} else {
+		if _, err := conn.Write([]byte{0x05, 0x02}); err != nil {
+			return
+		}
+		if !read(2) {
+			return
+		}
+		ulen := int(buf[1])
+		if !read(ulen) {
+			return
+		}
+		gotUser := string(buf[:ulen])
+		if !read(1) {
+			return
+		}
+		plen := int(buf[0])
+		if !read(plen) {
+			return
+		}
+		if gotUser != user || string(buf[:plen]) != pass {
+			conn.Write([]byte{0x01, 0x01})
+			return
+		}
+		if _, err := conn.Write([]byte{0x01, 0x00}); err != nil {
+			return
+		}
+	}
+
+	// Request: version, command, reserved, address type.
+	if !read(4) {
+		return
+	}
+	var host string
+	switch buf[3] {
+	case 0x01:
+		if !read(4) {
+			return
+		}
+		host = net.IP(buf[:4]).String()
+	case 0x03:
+		if !read(1) {
+			return
+		}
+		n := int(buf[0])
+		if !read(n) {
+			return
+		}
+		host = string(buf[:n])
+	case 0x04:
+		if !read(16) {
+			return
+		}
+		host = net.IP(buf[:16]).String()
+	default:
+		return
+	}
+	if !read(2) {
+		return
+	}
+	dest := net.JoinHostPort(host, strconv.Itoa(int(buf[0])<<8|int(buf[1])))
+	s.mu.Lock()
+	s.dests = append(s.dests, dest)
+	s.mu.Unlock()
+
+	upstream, err := net.DialTimeout("tcp", dest, 5*time.Second)
+	if err != nil {
+		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		return
+	}
+	defer upstream.Close()
+	if _, err := conn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}); err != nil {
+		return
+	}
+	go io.Copy(upstream, conn)
+	io.Copy(conn, upstream)
+}
+
+// fetchSourcesVia posts a {"urls": …, "socks5": …} body. A nil socks5 is
+// omitted entirely, which is the direct-only request shape.
+func fetchSourcesVia(t *testing.T, socks5 map[string]string, urls ...string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := map[string]any{"urls": urls}
+	if socks5 != nil {
+		req["socks5"] = socks5
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	return post(t, "/fetch-sources", string(body))
+}
+
+// The direct attempt fails on the scheme — plain HTTP is not allowed off a
+// direct client — and the retry through SOCKS5 carries it. The proxy's own
+// connection count is what proves the fallback ran, not the body alone.
+func TestFetchSourcesFallsBackToSOCKS5(t *testing.T) {
+	allowLoopbackDestinations(t)
+	socks := startSOCKS5(t, "", "")
+	upstream := textSource(t, "tg://proxy?server=192.0.2.5\n")
+
+	rec := fetchSourcesVia(t, map[string]string{"addr": socks.addr}, upstream)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got, want := rec.Body.String(), "tg://proxy?server=192.0.2.5\n"; got != want {
+		t.Errorf("body = %q, want %q", got, want)
+	}
+	if n := socks.connections(); n != 1 {
+		t.Fatalf("proxy saw %d connections, want 1 — the fallback did not run", n)
+	}
+	wantDest := strings.TrimPrefix(upstream, "http://")
+	if dests := socks.destinations(); len(dests) != 1 || dests[0] != wantDest {
+		t.Errorf("proxy destinations = %v, want [%s]", dests, wantDest)
+	}
+}
+
+// Credentials are passed through when given, and a wrong password fails the
+// handshake rather than being ignored.
+func TestFetchSourcesUsesSOCKS5Credentials(t *testing.T) {
+	allowLoopbackDestinations(t)
+	socks := startSOCKS5(t, "user", "hunter2")
+	upstream := textSource(t, "tg://proxy?server=192.0.2.6\n")
+
+	rec := fetchSourcesVia(t, map[string]string{"addr": socks.addr, "user": "user", "pass": "hunter2"}, upstream)
+	if got, want := rec.Body.String(), "tg://proxy?server=192.0.2.6\n"; got != want {
+		t.Errorf("body = %q, want %q — the credentials were not accepted", got, want)
+	}
+
+	rec = fetchSourcesVia(t, map[string]string{"addr": socks.addr, "user": "user", "pass": "wrong"}, upstream)
+	if body := rec.Body.String(); body != "" {
+		t.Errorf("body = %q with a wrong password, want empty", body)
+	}
+}
+
+// SOCKS5 is a fallback, not a route: a source the direct client can fetch never
+// touches the proxy.
+func TestFetchSourcesPrefersDirect(t *testing.T) {
+	allowLoopbackSources(t)
+	socks := startSOCKS5(t, "", "")
+	upstream := textSource(t, "tg://proxy?server=192.0.2.7\n")
+
+	rec := fetchSourcesVia(t, map[string]string{"addr": socks.addr}, upstream)
+
+	if got, want := rec.Body.String(), "tg://proxy?server=192.0.2.7\n"; got != want {
+		t.Errorf("body = %q, want %q", got, want)
+	}
+	if n := socks.connections(); n != 0 {
+		t.Errorf("proxy saw %d connections, want 0 — the direct attempt succeeded", n)
+	}
+}
+
+// No socks5 field, and an empty address, both mean direct-only: the plain-HTTP
+// source stays rejected because there is no proxy to route it through.
+func TestFetchSourcesWithoutSOCKS5StaysDirect(t *testing.T) {
+	allowLoopbackDestinations(t)
+	upstream := textSource(t, "tg://proxy?server=192.0.2.8\n")
+
+	for _, socks5 := range []map[string]string{nil, {"addr": ""}} {
+		rec := fetchSourcesVia(t, socks5, upstream)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("socks5=%v: status = %d, want 200", socks5, rec.Code)
+		}
+		if body := rec.Body.String(); body != "" {
+			t.Errorf("socks5=%v: body = %q, want empty — plain HTTP has no route", socks5, body)
+		}
+	}
+}
+
+// The destination policy is not something a proxy can be used to step around:
+// it is applied before the proxy is dialled, to the literal address and to a
+// name this machine can resolve alike.
+func TestFetchSourcesBlocksAPrivateDestinationThroughSOCKS5(t *testing.T) {
+	socks := startSOCKS5(t, "", "")
+
+	for _, raw := range []string{
+		"http://10.0.0.1/list.txt",
+		"http://169.254.169.254/latest/meta-data/",
+		"http://localhost:9/list.txt",
+	} {
+		rec := fetchSourcesVia(t, map[string]string{"addr": socks.addr}, raw)
+		if body := rec.Body.String(); body != "" {
+			t.Errorf("%s: body = %q, want empty", raw, body)
+		}
+	}
+	if n := socks.connections(); n != 0 {
+		t.Errorf("proxy saw %d connections, want 0 — the destination check ran too late", n)
+	}
+}
+
+// A redirect on the SOCKS5 path is a fresh destination and gets the same check.
+// The first hop is reached through the proxy; the second must not be.
+func TestFetchSourcesChecksARedirectOnTheSOCKS5Path(t *testing.T) {
+	allowLoopbackDestinations(t)
+	socks := startSOCKS5(t, "", "")
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://10.0.0.1/list.txt", http.StatusFound)
+	}))
+	t.Cleanup(redirect.Close)
+
+	rec := fetchSourcesVia(t, map[string]string{"addr": socks.addr}, redirect.URL+"/list.txt")
+
+	if body := rec.Body.String(); body != "" {
+		t.Errorf("body = %q, want empty — the redirect must not be followed", body)
+	}
+	wantDest := strings.TrimPrefix(redirect.URL, "http://")
+	if dests := socks.destinations(); len(dests) != 1 || dests[0] != wantDest {
+		t.Errorf("proxy destinations = %v, want only the first hop [%s]", dests, wantDest)
 	}
 }
