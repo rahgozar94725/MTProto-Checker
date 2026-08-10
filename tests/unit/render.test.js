@@ -9,6 +9,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+// Not a bare `setTimeout`. mountApp installs a wrapper that unref()s every handle, so app
+// timers cannot hold the process open (helpers/dom.js), and `setTimeout` is in its GLOBAL_KEYS
+// -- so a bare call inside a mount gets the unref'd one, and an unref'd timer does not keep the
+// event loop alive. The two waits below would then be the only thing pending, the loop would
+// drain, and node cancels the awaiting test plus everything queued behind it: 10 tests reported
+// as `cancelled` with `Promise resolution is still pending but the event loop has already
+// resolved`, and 0 failed. Seen on CI's Node 22 while Node 26.5 happened to hold a handle and
+// pass. This import is bound before any mount and stays ref'd. The app's own toast timer is
+// still unref'd, which is fine: unref only means it will not keep the loop alive by itself.
+import { setTimeout as sleep } from 'node:timers/promises';
 import { mountApp } from '../helpers/dom.js';
 import { pingClass } from '../../public/js/format.js';
 import {
@@ -251,10 +261,10 @@ test('a second toast is not cut short by the first one timing out', async () => 
         const toast = app.document.getElementById('toast');
 
         showToast(app.document, 'first');
-        await new Promise(resolve => setTimeout(resolve, TOAST_MS - 100));
+        await sleep(TOAST_MS - 100);
         showToast(app.document, 'second');
         // Past when the first toast's timer would have fired, well before the second's.
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await sleep(300);
 
         assert.equal(toast.textContent, 'second');
         assert.ok(toast.classList.contains('show'));
@@ -271,7 +281,7 @@ test('the toast hides itself and empties the live region when its time is up', a
         const toast = app.document.getElementById('toast');
 
         showToast(app.document, 'done');
-        await new Promise(resolve => setTimeout(resolve, TOAST_MS + 100));
+        await sleep(TOAST_MS + 100);
 
         assert.equal(toast.textContent, '');
         assert.equal(toast.className, 'toast success');
