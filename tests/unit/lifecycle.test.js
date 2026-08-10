@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { mountApp } from '../helpers/dom.js';
 import { body, progressFrame, doneFrame } from '../helpers/sse.js';
 import { translations, interpolate } from '../../public/js/i18n.js';
+import { DEFAULT_SOURCES, shortUrl } from '../../public/js/sources.js';
 
 const fa = translations.fa;
 const encoder = new TextEncoder();
@@ -75,10 +76,13 @@ const SNAPSHOT_LINKS = [
     link('198.51.100.20', 8443, SNAPSHOT_SECRETS[1]),
 ];
 const SNAPSHOT_GENERATED_AT = '2026-08-09T03:17:00.000Z';
+// The header names two of the real built-in sources, shortened exactly as the writer shortens
+// them: scoring joins a header back onto the source model by url, so a header naming lists
+// nobody has heard of would credit nothing and prove nothing.
 const SNAPSHOT_TEXT = [
     `# generated ${SNAPSHOT_GENERATED_AT} by scripts/build-snapshot.mjs`,
-    '# 0 example.invalid/list-a.txt',
-    '# 1 example.invalid/list-b.txt',
+    `# 0 ${shortUrl(DEFAULT_SOURCES[0])}`,
+    `# 1 ${shortUrl(DEFAULT_SOURCES[1])}`,
     `${SNAPSHOT_LINKS[0]}#seen=1;src=0`,
     `${SNAPSHOT_LINKS[1]}#seen=2;src=0,1`,
     '',
@@ -470,6 +474,179 @@ test('five results in one tick queue exactly one render', async () => {
 
         app.flushFrames();
         assert.equal(rows(app).length, 5);
+    } finally {
+        app.cleanup();
+    }
+});
+
+// --- the source list, its scores, and the scan order they decide ---------------------
+
+// Two links seen once each, one per source, so nothing but the source scores can order them.
+const TIE_SECRETS = ['ee4d5e6f708192a3b4c5d6e7f8091a2b', 'ee5e6f708192a3b4c5d6e7f8091a2b3c'];
+const TIE_LINKS = [link('192.0.2.40', 443, TIE_SECRETS[0]), link('192.0.2.41', 443, TIE_SECRETS[1])];
+const TIE_SNAPSHOT = [
+    `# generated ${SNAPSHOT_GENERATED_AT} by scripts/build-snapshot.mjs`,
+    `# 0 ${shortUrl(DEFAULT_SOURCES[0])}`,
+    `# 1 ${shortUrl(DEFAULT_SOURCES[1])}`,
+    `${TIE_LINKS[0]}#seen=1;src=0`,
+    `${TIE_LINKS[1]}#seen=1;src=1`,
+    '',
+].join('\n');
+
+// A stored list where the second source is the one that has ever worked.
+function storedScores({ secondEnabled = true } = {}) {
+    return JSON.stringify([
+        { url: DEFAULT_SOURCES[0], enabled: true, score: { linksProvided: 10, linksWorking: 0, lastScan: 'once' } },
+        { url: DEFAULT_SOURCES[1], enabled: secondEnabled, score: { linksProvided: 10, linksWorking: 5, lastScan: 'once' } },
+    ]);
+}
+
+const sourceRows = app => [...app.document.querySelectorAll('#sourcesList .source-row')];
+const sourceBoxes = app => sourceRows(app).map(row => row.querySelector('input'));
+const sourceDetails = app => sourceRows(app).map(row => row.querySelector('.source-detail').textContent);
+const storedSources = app => JSON.parse(app.window.localStorage.getItem('sources'));
+
+test('the source list boots with every built-in enabled and unscored', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        assert.equal(sourceRows(app).length, DEFAULT_SOURCES.length);
+        assert.deepEqual(sourceBoxes(app).map(box => box.checked), DEFAULT_SOURCES.map(() => true));
+        assert.deepEqual(sourceRows(app).map(row => row.querySelector('.source-name').textContent),
+            DEFAULT_SOURCES.map(shortUrl));
+        assert.deepEqual(sourceDetails(app), DEFAULT_SOURCES.map(() => fa.sourceUnscored));
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('disabling a source persists it, and it comes back disabled on the next boot', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    let stored;
+    try {
+        sourceBoxes(app)[1].click();
+        await tick();
+
+        stored = app.window.localStorage.getItem('sources');
+        assert.equal(storedSources(app).find(s => s.url === DEFAULT_SOURCES[1]).enabled, false);
+        assert.equal(sourceBoxes(app)[1].checked, false, 'the row redraws in its new state');
+        assert.equal(sourceBoxes(app)[0].checked, true, 'and nothing else moved');
+    } finally {
+        app.cleanup();
+    }
+
+    const reloaded = await mountApp({ fetch: respondWith(''), storage: { sources: stored } });
+    try {
+        assert.deepEqual(sourceBoxes(reloaded).map(box => box.checked),
+            DEFAULT_SOURCES.map((_, i) => i !== 1));
+    } finally {
+        reloaded.cleanup();
+    }
+});
+
+test('a stored source list the app cannot read resolves to the defaults instead of breaking boot', async () => {
+    const app = await mountApp({ fetch: respondWith(''), storage: { sources: '{not json at all' } });
+    try {
+        assert.equal(sourceRows(app).length, DEFAULT_SOURCES.length);
+        assert.deepEqual(sourceBoxes(app).map(box => box.checked), DEFAULT_SOURCES.map(() => true));
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a finished scan credits every source of a working proxy and persists the score', async () => {
+    const stream = body([
+        progress({ server: '192.0.2.10', secret: SNAPSHOT_SECRETS[0], ok: true, ping: 90, completed: 1, total: 2, working: 1 }),
+        progress({ server: '198.51.100.20', port: 8443, secret: SNAPSHOT_SECRETS[1], ok: false, completed: 2, total: 2, working: 1 }),
+        doneFrame({ completed: 2 }),
+    ]);
+    const app = await mountApp({ fetch: respondToSnapshot(SNAPSHOT_TEXT, respondWith(stream)) });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        click(app, 'startBtn');
+        await waitFor(() => isIdle(app), 'the scan to finish');
+
+        // Source 0 published both links and one of them worked; source 1 published only the
+        // link that failed -- and is credited for having published it, not penalized.
+        assert.deepEqual(sourceDetails(app).slice(0, 2), [
+            interpolate(fa.sourceScore, { n: 2, w: 1, rate: '50.0' }),
+            interpolate(fa.sourceScore, { n: 1, w: 0, rate: '0.0' }),
+        ]);
+        assert.deepEqual(sourceDetails(app).slice(2), DEFAULT_SOURCES.slice(2).map(() => fa.sourceUnscored));
+
+        const persisted = storedSources(app);
+        assert.equal(persisted.find(s => s.url === DEFAULT_SOURCES[0]).score.linksWorking, 1);
+        assert.equal(persisted.find(s => s.url === DEFAULT_SOURCES[1]).score.linksProvided, 1);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a scan posts the most-redundant proxy first, whatever order the file was in', async () => {
+    const app = await mountApp({ fetch: respondToSnapshot(SNAPSHOT_TEXT, respondWith(body([doneFrame()]))) });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        // The textarea holds seen=1 first, seen=2 second -- the request must not.
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), SNAPSHOT_LINKS);
+
+        click(app, 'startBtn');
+        await waitFor(() => isIdle(app), 'the scan to finish');
+
+        const posted = JSON.parse(app.recorded.fetches.at(-1).init.body);
+        assert.deepEqual(posted.map(p => p.secret), [SNAPSHOT_SECRETS[1], SNAPSHOT_SECRETS[0]]);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('proxies tied on redundancy are posted best-scoring source first', async () => {
+    const app = await mountApp({
+        fetch: respondToSnapshot(TIE_SNAPSHOT, respondWith(body([doneFrame()]))),
+        storage: { sources: storedScores() },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+        click(app, 'startBtn');
+        await waitFor(() => isIdle(app), 'the scan to finish');
+
+        const posted = JSON.parse(app.recorded.fetches.at(-1).init.body);
+        assert.deepEqual(posted.map(p => p.secret), [TIE_SECRETS[1], TIE_SECRETS[0]]);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a disabled source stops pulling its proxies up the scan order', async () => {
+    const app = await mountApp({
+        fetch: respondToSnapshot(TIE_SNAPSHOT, respondWith(body([doneFrame()]))),
+        storage: { sources: storedScores({ secondEnabled: false }) },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+        click(app, 'startBtn');
+        await waitFor(() => isIdle(app), 'the scan to finish');
+
+        // Both sources rate zero now, so the tie falls back to file order.
+        const posted = JSON.parse(app.recorded.fetches.at(-1).init.body);
+        assert.deepEqual(posted.map(p => p.secret), [TIE_SECRETS[0], TIE_SECRETS[1]]);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('the source list follows a language change', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        const langSelect = app.document.getElementById('langSelect');
+        langSelect.value = 'ru';
+        langSelect.dispatchEvent(new app.window.Event('change'));
+
+        assert.deepEqual(sourceDetails(app), DEFAULT_SOURCES.map(() => translations.ru.sourceUnscored));
     } finally {
         app.cleanup();
     }

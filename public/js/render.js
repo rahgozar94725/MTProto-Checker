@@ -48,6 +48,40 @@ export function renderResultsTable(doc, proxies, rowCopyLabel) {
     doc.getElementById('resultsPanel').classList.toggle('has-results', proxies.length > 0);
 }
 
+// One row per source: a checkbox that disables without deleting, the shortened url, and
+// whatever the caller worked out to say about its score. `label` and `detail` are already
+// localized -- this module reads no translation table, the same way it reads no state.
+//
+// Same textContent rule as the results table, for the same reason: a user-added source url is
+// an arbitrary string typed into a text field. The full url rides the checkbox as data, since
+// that is the key the model is keyed by and the shortened label is not.
+export function renderSourceRows(doc, rows) {
+    const list = doc.getElementById('sourcesList');
+    const frag = doc.createDocumentFragment();
+
+    for (const row of rows) {
+        const box = doc.createElement('input');
+        box.type = 'checkbox';
+        box.checked = row.enabled;
+        box.dataset.url = row.url;
+
+        const name = doc.createElement('span');
+        name.className = 'source-name';
+        name.textContent = row.label;
+
+        const detail = doc.createElement('span');
+        detail.className = 'source-detail';
+        detail.textContent = row.detail;
+
+        const label = doc.createElement('label');
+        label.className = 'source-row';
+        label.append(box, name, detail);
+        frag.appendChild(label);
+    }
+
+    list.replaceChildren(frag);
+}
+
 // best is the lowest ping found so far, or null when nothing works yet.
 export function renderStats(doc, { checked, total, working, best, skipped }) {
     doc.getElementById('tileChecked').textContent = checked;
