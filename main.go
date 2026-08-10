@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -39,8 +40,13 @@ const (
 	testAppHash = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
 	// maxBatchSize entries at ~500 B of worst-case JSON each is ~5 MiB;
 	// maxBodySize leaves headroom above that. Exceeding either → 413.
-	maxBodySize        = 8 * 1024 * 1024
-	maxBatchSize       = 10_000
+	maxBodySize  = 8 * 1024 * 1024
+	maxBatchSize = 10_000
+	// A public proxy list is tens of KiB; the whole 17-source corpus is
+	// ~233 KB. 5 MiB per source is far above anything plausible and is
+	// enforced while reading, so an endless response is cut off, not buffered.
+	maxSourceBytes     = 5 * 1024 * 1024
+	maxSources         = 20
 	maxConcurrency     = 50
 	defaultTimeout     = 5
 	minTimeout         = 3
@@ -84,6 +90,15 @@ func cachedLookupHost(host string) ([]net.IP, error) {
 	dnsCache[host] = &dnsCacheEntry{ips: ips, next: time.Now().Add(5 * time.Minute)}
 	dnsCacheMu.Unlock()
 	return ips, nil
+}
+
+// sourceTimeout bounds one upstream source fetch. It is a var rather than a
+// const only so fetchsources_test.go can shorten it; nothing in production
+// writes it.
+var sourceTimeout = 30 * time.Second
+
+type FetchSourcesRequest struct {
+	URLs []string `json:"urls"`
 }
 
 type CheckRequest struct {
@@ -281,6 +296,40 @@ func openBrowser(url string) {
 		return
 	}
 	go func() { _ = cmd.Wait() }()
+}
+
+// fetchSource retrieves one source's raw text under its own deadline. The body
+// is read through a LimitReader one byte past the cap, so an oversized source
+// is cut off mid-read and rejected instead of being buffered whole.
+//
+// No scheme allowlist and no private-destination check yet — that is Task 12,
+// and this endpoint does not ship without it.
+func fetchSource(ctx context.Context, url string) (string, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, sourceTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSourceBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if len(body) > maxSourceBytes {
+		return "", errors.Errorf("source exceeds %d bytes", maxSourceBytes)
+	}
+	return string(body), nil
 }
 
 // readCheckRequests decodes a batch request body, enforcing maxBodySize and
@@ -618,6 +667,62 @@ func newMux() *http.ServeMux {
 		wg.Wait()
 		log.Printf("STREAM DONE %d/%d working", working, total)
 		sendEvent("done", map[string]int{"working": working, "total": total})
+	}))
+
+	mux.HandleFunc("/fetch-sources", recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
+
+		var req FetchSourcesRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				jsonResponse(w, http.StatusRequestEntityTooLarge,
+					map[string]string{"error": fmt.Sprintf("request body exceeds %d bytes", maxBodySize)})
+				return
+			}
+			jsonResponse(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		if len(req.URLs) > maxSources {
+			jsonResponse(w, http.StatusRequestEntityTooLarge,
+				map[string]string{"error": fmt.Sprintf("too many sources: %d, max %d per request", len(req.URLs), maxSources)})
+			return
+		}
+
+		// Fetched concurrently, concatenated by index: the output order is the
+		// request order regardless of which source answers first. A failed
+		// source contributes nothing and aborts nothing.
+		texts := make([]string, len(req.URLs))
+		var wg sync.WaitGroup
+		for i, u := range req.URLs {
+			wg.Add(1)
+			go func(idx int, url string) {
+				defer wg.Done()
+				text, err := fetchSource(r.Context(), url)
+				if err != nil {
+					log.Printf("SOURCE FAIL %s: %v", url, err)
+					return
+				}
+				texts[idx] = text
+			}(i, u)
+		}
+		wg.Wait()
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		for _, text := range texts {
+			if text == "" {
+				continue
+			}
+			io.WriteString(w, text)
+			if !strings.HasSuffix(text, "\n") {
+				io.WriteString(w, "\n")
+			}
+		}
 	}))
 
 	embeddedFS, err := fs.Sub(publicFS, "public")
