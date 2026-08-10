@@ -596,6 +596,36 @@ test('a disabled built-in keeps its exclusive links out of the load', async () =
     }
 });
 
+// The snapshot carries attribution and a user's own list carries none, so a proxy both of them
+// publish looks — to the attribution map alone — like one only the disabled built-in has. It is
+// not: an enabled source published it too, which is the whole rule dropDisabledSources states.
+// These lists overlap heavily in practice, so this is the ordinary case, not a corner of one.
+test('a disabled built-in does not take a link an enabled user source also publishes', async () => {
+    const app = await mountApp({
+        // SNAPSHOT_TEXT publishes link 0 from source 0 alone; the user's own list carries it too.
+        fetch: respondToLoad({ live: SNAPSHOT_TEXT, userSources: SNAPSHOT_LINKS[0] }),
+        storage: {
+            sources: JSON.stringify([
+                { url: DEFAULT_SOURCES[0], enabled: false },
+                { url: USER_SOURCE, enabled: true },
+            ]),
+        },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the load');
+
+        const loaded = app.document.getElementById('inputProxies').value.split('\n');
+        assert.deepEqual([...loaded].sort(), [...SNAPSHOT_LINKS].sort(),
+            'the link the enabled user source publishes stays');
+        // The count is what the user is told, so it may not name a link that is right there in
+        // front of them: nothing was published only by the source they disabled.
+        assert.doesNotMatch(app.document.getElementById('console').textContent, /Dropped/);
+    } finally {
+        app.cleanup();
+    }
+});
+
 test('disabling every source leaves nothing to load, and says so', async () => {
     const app = await mountApp({
         fetch: respondToLoad({ live: SNAPSHOT_TEXT }),
