@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { parseSnapshot, splitFragment } from '../../public/js/snapshot.js';
 import { parseProxyList, proxyKey } from '../../public/js/parse.js';
+import { DEFAULT_SOURCE_OWNERS } from '../../public/js/sources.js';
 import { buildSnapshot } from '../../scripts/build-snapshot.mjs';
 
 const fixture = n =>
@@ -67,11 +68,34 @@ test('parseSnapshot keys attribution by proxyKey', () => {
     assert.deepEqual(parseSnapshot(SNAPSHOT).attribution.get(SHARED_KEY), { seen: 3, srcs: [0, 1, 2] });
 });
 
-test('parseSnapshot keeps a src id that no header line declares', () => {
+// The link and its srcs are kept — dropDisabledSources still has to be able to say "no source
+// the user disabled published this". What the id does not do is add to `seen`: this reader
+// cannot tell whether id 99 is an independent publisher or the same account as id 0, and
+// `seen` is the first scan-order key. Counting it would hand a compromised branch the whole
+// ranking back, since `src=100,101,…` is 32 ids no header ever has to declare.
+test('parseSnapshot keeps a src id that no header line declares, and does not count it', () => {
     const { sources, attribution } = parseSnapshot(`${SHARED_LINK}#seen=1;src=99`);
 
-    assert.deepEqual(attribution.get(SHARED_KEY), { seen: 1, srcs: [99] });
+    assert.deepEqual(attribution.get(SHARED_KEY), { seen: 0, srcs: [99] });
     assert.equal(sources[99], undefined);
+});
+
+// The attack the owner mapping closes. Ten of the seventeen defaults are one GitHub account
+// (V2RAYCONFIGSPOOL, ids 6–15), so writing one line into all ten of that account's files is a
+// single compromise that used to mint seen=10 — above essentially every legitimately
+// redundant proxy, and orderForScan sorts on seen before source score.
+test('parseSnapshot counts distinct publishers, not distinct files', () => {
+    const oneAccount = `${SHARED_LINK}#seen=10;src=6,7,8,9,10,11,12,13,14,15`;
+
+    assert.deepEqual(parseSnapshot(oneAccount).attribution.get(SHARED_KEY),
+        { seen: 1, srcs: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
+});
+
+test('parseSnapshot counts a publisher once however many of its files carried the proxy', () => {
+    const mixed = `${SHARED_LINK}#seen=4;src=0,6,7,99`;
+
+    assert.deepEqual(parseSnapshot(mixed).attribution.get(SHARED_KEY),
+        { seen: 2, srcs: [0, 6, 7, 99] }, 'iwh3n and V2RAYCONFIGSPOOL — 99 is not a publisher this reader knows');
 });
 
 test('parseSnapshot accepts a plain link and records no attribution for it', () => {
@@ -214,7 +238,13 @@ test('a real build-snapshot output round-trips to the same proxies it was built 
 
     for (const [key, entry] of attribution) {
         assert.deepEqual(entry.srcs, universe.get(key).srcs);
-        assert.equal(entry.seen, universe.get(key).srcs.length);
+        // Not `srcs.length`. The builder writes one id per file and `seen=` to match, which is
+        // what keeps the line well-formed; the number the reader hands to orderForScan is
+        // derived from the ids' publishers instead. These fixtures sit at ids 0–2, which are
+        // three different accounts, so the two agree here — state it as the publisher count
+        // rather than the id count so it keeps meaning that if the defaults ever move.
+        const publishers = new Set(entry.srcs.map(id => DEFAULT_SOURCE_OWNERS[id]).filter(o => o !== undefined));
+        assert.equal(entry.seen, publishers.size);
     }
 });
 

@@ -21,6 +21,7 @@
 // input is a file fetched over the network and the caller is the UI's boot path.
 
 import { parseLink, proxyKey } from './parse.js';
+import { DEFAULT_SOURCE_OWNERS } from './sources.js';
 
 const GENERATED_RE = /^#\s*generated\s+(\S+)/;
 // The index is bounded because `sources[Number(id)] = url` on a sparse array is an allocation
@@ -100,10 +101,37 @@ export function parseSnapshot(text = '') {
             // a compromised snapshot branch could otherwise pin an attacker-operated proxy to
             // the head of every user's next scan with one inflated number.
             if (Number(meta[1]) === srcs.length) {
-                attribution.set(proxyKey(result.proxy), { seen: srcs.length, srcs });
+                attribution.set(proxyKey(result.proxy), { seen: countPublishers(srcs), srcs });
             }
         }
     }
 
     return { generatedAt, sources, links, attribution };
+}
+
+// `seen` is evidence of independent corroboration, so it counts publishers rather than files.
+// Ten of the seventeen defaults are one GitHub account, and the number this returns is the
+// first key orderForScan sorts on — so counting ids meant one compromised account could write
+// one line into ten of its own files and land it above essentially every genuinely redundant
+// proxy, in every user's next scan. The dedupe above stops a line *claiming* ten ids it does
+// not have; this stops ten ids that are really one publisher from meaning ten.
+//
+// It is derived here rather than read off the line, and from this build's own source list
+// rather than the file's header, because a branch that can write the lines can write the
+// header too — and it is the reader that has to hold, since snapshots published before this
+// change are still out there and still loaded by one click.
+//
+// An id this reader cannot resolve contributes nothing. It is deliberately not counted as an
+// unknown publisher of its own: `src=100,101,…` is 32 ids no header ever has to declare, which
+// would hand the ranking straight back. The srcs themselves are still recorded, so
+// dropDisabledSources can still answer "did any source the user disabled publish this", and a
+// proxy whose ids are all unknown simply ranks like an unattributed one — the safe direction
+// for a client older than the snapshot it just fetched.
+function countPublishers(srcs) {
+    const owners = new Set();
+    for (const id of srcs) {
+        const owner = DEFAULT_SOURCE_OWNERS[id];
+        if (owner !== undefined) owners.add(owner);
+    }
+    return owners.size;
 }

@@ -63,6 +63,34 @@ export function shortUrl(url) {
     return url.startsWith(RAW_PREFIX) ? url.slice(RAW_PREFIX.length) : url;
 }
 
+// Who has to be compromised for a source to start lying — which is not the same question as
+// which file a line came from, and the two answers differ by a factor of ten here. Ten of the
+// seventeen defaults are `V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/…/telegram_proxy_no{1..10}.txt`:
+// one account, ten `src=` ids. parseSnapshot counts publishers rather than ids because `seen`
+// is the first scan-order key, so counting files let a single account mint `seen=10` and pin a
+// proxy of its choice to the head of every user's next scan.
+//
+// A raw.githubusercontent.com path starts with the account, and anything else is reduced to
+// its host, which is the same question for a source the user added themselves. Lowercased
+// because GitHub account names are case-insensitive. Total, like everything else this module
+// exposes to a stored value: a string that is no URL at all is its own owner.
+export function sourceOwner(url) {
+    const short = shortUrl(url);
+    if (short !== url) return short.split('/')[0].toLowerCase();
+
+    try {
+        return new URL(url).host.toLowerCase();
+    } catch {
+        return url.toLowerCase();
+    }
+}
+
+// Positional, exactly as `src=` ids are, so parseSnapshot can resolve an id to a publisher.
+// It reads *this* list rather than the snapshot's own header: a compromised branch writes the
+// header too, so a file claiming ten different urls for its ten ids would otherwise buy back
+// the count the owner mapping just took away.
+export const DEFAULT_SOURCE_OWNERS = DEFAULT_SOURCES.map(sourceOwner);
+
 // The restore-defaults action, and the fallback every unusable stored value lands on. A
 // fresh array of fresh entries each call, so a caller mutating one cannot poison the next.
 // Scores go with it: restoring the defaults is a reset, not a re-enable.
