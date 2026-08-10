@@ -214,6 +214,40 @@ test.describe('every migrated control still fires', () => {
         expect(errors).toEqual([]);
     });
 
+    test('#addSourceBtn, the row remove button and #restoreSourcesBtn round-trip a source', async ({ page }) => {
+        const errors = collectErrors(page);
+        const MY_LIST = 'https://example.invalid/my-list.txt';
+        await page.goto('/');
+
+        await page.locator('#sourcesDrawer summary').click();
+        await page.locator('#sourceUrlInput').fill(MY_LIST);
+        await page.locator('#addSourceBtn').click();
+
+        const rows = page.locator('#sourcesList .source-row');
+        await expect(rows).toHaveCount(DEFAULT_SOURCES.length + 1);
+        await expect(rows.last()).toContainText(MY_LIST);
+        await expect(page.locator('#sourceUrlInput')).toHaveValue('');
+        // Only the user's own row offers deletion; a built-in is disabled instead.
+        await expect(page.locator('#sourcesList .source-remove')).toHaveCount(1);
+
+        await page.reload();
+        await page.locator('#sourcesDrawer summary').click();
+        await expect(page.locator('#sourcesList .source-row')).toHaveCount(DEFAULT_SOURCES.length + 1);
+
+        // Removing must not also toggle the checkbox the row's label owns.
+        await page.locator('#sourcesList .source-remove').click();
+        await expect(page.locator('#sourcesList .source-row')).toHaveCount(DEFAULT_SOURCES.length);
+        await expect(page.locator('#sourcesList input[type="checkbox"]').last()).toBeChecked();
+
+        // And restore puts a disabled built-in back on.
+        await page.locator('#sourcesList input[type="checkbox"]').first().uncheck();
+        await page.locator('#restoreSourcesBtn').click();
+        await expect(page.locator('#sourcesList input[type="checkbox"]').first()).toBeChecked();
+        await expect(page.locator('#console')).toContainText('restored to the built-in defaults');
+
+        expect(errors).toEqual([]);
+    });
+
     test('#socks5Addr persists across a reload and warns about the stored password', async ({ page }) => {
         const errors = collectErrors(page);
         await page.goto('/');

@@ -306,6 +306,41 @@ test('a source row renders its url as text, never as markup', async () => {
     }
 });
 
+test('only a removable source row gets a remove button, carrying its url and label', async () => {
+    const app = await mountApp();
+    try {
+        renderSourceRows(app.document, [
+            { url: 'https://example.invalid/mine.txt', label: 'mine.txt', detail: '', enabled: true, removable: true },
+            { url: 'https://example.invalid/built-in.txt', label: 'built-in.txt', detail: '', enabled: true },
+        ], 'حذف');
+
+        const rows = [...app.document.querySelectorAll('#sourcesList .source-row')];
+        const buttons = rows.map(r => r.querySelector('.source-remove'));
+
+        assert.equal(buttons[0].dataset.url, 'https://example.invalid/mine.txt');
+        assert.equal(buttons[0].getAttribute('aria-label'), 'حذف');
+        assert.equal(buttons[0].type, 'button');
+        assert.equal(buttons[1], null, 'a built-in is disabled, never deleted');
+    } finally {
+        app.cleanup();
+    }
+});
+
+// The row's checkbox is what a click on the row toggles, so the remove button must sit outside
+// the label -- a click that deleted the row *and* flipped a checkbox would be neither.
+test('the remove button is not inside the row label', async () => {
+    const app = await mountApp();
+    try {
+        renderSourceRows(app.document, [
+            { url: 'https://example.invalid/mine.txt', label: 'mine.txt', detail: '', enabled: true, removable: true },
+        ], 'حذف');
+
+        assert.equal(app.document.querySelector('#sourcesList label .source-remove'), null);
+    } finally {
+        app.cleanup();
+    }
+});
+
 test('rendering the source list twice replaces the rows instead of appending', async () => {
     const app = await mountApp();
     try {

@@ -55,7 +55,11 @@ export const translations = {
         socks5AddrLabel: "آدرس",
         socks5UserLabel: "نام کاربری",
         socks5PassLabel: "رمز عبور",
-        socks5Warning: "⚠️ رمز عبور به‌صورت متن ساده در حافظهٔ مرورگر (localStorage) ذخیره می‌شود."
+        socks5Warning: "⚠️ رمز عبور به‌صورت متن ساده در حافظهٔ مرورگر (localStorage) ذخیره می‌شود.",
+        addSourceBtn: "افزودن",
+        restoreSourcesBtn: "بازگردانی پیش‌فرض‌ها",
+        removeSource: "حذف منبع",
+        sourceUrlPlaceholder: "نشانی لیست پروکسی (https://…)"
     },
     en: {
         title: "MTProto Checker",
@@ -110,7 +114,11 @@ export const translations = {
         socks5AddrLabel: "Address",
         socks5UserLabel: "Username",
         socks5PassLabel: "Password",
-        socks5Warning: "⚠️ The password is stored in your browser's localStorage in plaintext."
+        socks5Warning: "⚠️ The password is stored in your browser's localStorage in plaintext.",
+        addSourceBtn: "Add",
+        restoreSourcesBtn: "Restore defaults",
+        removeSource: "Remove source",
+        sourceUrlPlaceholder: "Proxy list URL (https://…)"
     },
     ru: {
         title: "MTProto Checker",
@@ -165,7 +173,11 @@ export const translations = {
         socks5AddrLabel: "Адрес",
         socks5UserLabel: "Имя пользователя",
         socks5PassLabel: "Пароль",
-        socks5Warning: "⚠️ Пароль хранится в localStorage браузера в открытом виде."
+        socks5Warning: "⚠️ Пароль хранится в localStorage браузера в открытом виде.",
+        addSourceBtn: "Добавить",
+        restoreSourcesBtn: "Сбросить к умолчаниям",
+        removeSource: "Удалить источник",
+        sourceUrlPlaceholder: "Ссылка на список прокси (https://…)"
     },
     zh: {
         title: "MTProto Checker",
@@ -220,7 +232,11 @@ export const translations = {
         socks5AddrLabel: "地址",
         socks5UserLabel: "用户名",
         socks5PassLabel: "密码",
-        socks5Warning: "⚠️ 密码以明文形式存储在浏览器的 localStorage 中。"
+        socks5Warning: "⚠️ 密码以明文形式存储在浏览器的 localStorage 中。",
+        addSourceBtn: "添加",
+        restoreSourcesBtn: "恢复默认",
+        removeSource: "删除来源",
+        sourceUrlPlaceholder: "代理列表网址（https://…）"
     }
 };
 
