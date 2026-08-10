@@ -57,8 +57,15 @@ const (
 	// once, so the two limits are enforced together — maxRequestSourceBytes is a
 	// budget the sources of one request share, and maxFetchSourcesInFlight caps
 	// the number of requests holding one.
-	maxSourceBytes          = 1024 * 1024
-	maxRequestSourceBytes   = 4 * 1024 * 1024
+	maxSourceBytes        = 1024 * 1024
+	maxRequestSourceBytes = 4 * 1024 * 1024
+	// Every cap above is enforced on the response body. Headers are read and
+	// parsed into the header map before the body is touched, so they escape all
+	// of them: at the stdlib default of 10 MiB a source whose body is 2 bytes
+	// still costs ~11.6 MiB resident, measured — 20 sources across 4 requests
+	// in flight is ~880 MiB against the 16 MiB this design intends. A proxy
+	// list's headers are a few hundred bytes; 64 KiB is far above any of them.
+	maxSourceHeaderBytes    = 64 * 1024
 	maxFetchSourcesInFlight = 4
 	maxSources              = 20
 	maxConcurrency          = 50
@@ -297,6 +304,10 @@ func socks5Client(cfg *SOCKS5Config) (*http.Client, error) {
 			return checkSourceURL(req.URL.String(), true)
 		},
 		Transport: &http.Transport{
+			// Headers are read whole into the header map before the body is
+			// touched, so they are outside every byte cap below — see
+			// maxSourceHeaderBytes.
+			MaxResponseHeaderBytes: maxSourceHeaderBytes,
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				if err := checkSOCKS5Destination(address); err != nil {
 					return nil, err
@@ -321,6 +332,7 @@ var sourceClient = &http.Client{
 		return checkSourceURL(req.URL.String(), false)
 	},
 	Transport: &http.Transport{
+		MaxResponseHeaderBytes: maxSourceHeaderBytes,
 		DialContext: (&net.Dialer{
 			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,
