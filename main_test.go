@@ -393,6 +393,12 @@ func TestHostAllowlist(t *testing.T) {
 		{"127.0.0.1:3000", []string{"127.0.0.1:3000", "localhost:3000", "[::1]:3000"}},
 		{"localhost:8080", []string{"127.0.0.1:8080", "localhost:8080", "[::1]:8080"}},
 		{"[::1]:3000", []string{"127.0.0.1:3000", "localhost:3000", "[::1]:3000"}},
+		// The whole of 127/8 is loopback, and HOST=127.0.0.2 is how a second
+		// instance sidesteps a port conflict. shouldOpenBrowser accepts it and
+		// opens the browser there, so leaving the bound address out of the list
+		// 403s every POST on a page the server itself launched -- with the map
+		// non-empty, so the WARNING line does not fire either.
+		{"127.0.0.2:3000", []string{"127.0.0.2:3000", "127.0.0.1:3000", "localhost:3000", "[::1]:3000"}},
 		{"0.0.0.0:3000", nil},
 		{"192.168.1.5:3000", nil},
 		{"[::]:3000", nil},
