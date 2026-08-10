@@ -755,6 +755,29 @@ func readCheckRequests(w http.ResponseWriter, r *http.Request) ([]CheckRequest, 
 	return reqs, 0, ""
 }
 
+// concurrencyLimit reads X-Concurrency and clamps it to what the two batch
+// endpoints' semaphores will honour. Both of them ask the same question and
+// answered it with the same twelve lines, which is a limit that can drift on one
+// endpoint and not the other — and neither copy was reachable from a test.
+//
+// The fallback is 10, deliberately not the 50 the UI selects by default: this is
+// what a caller that sends no header gets. Sscanf's error is ignored on purpose,
+// preserved behaviour — an unparseable header leaves the fallback standing
+// rather than failing the request.
+func concurrencyLimit(h http.Header) int {
+	limit := 10
+	if l := h.Get("X-Concurrency"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > maxConcurrency {
+		limit = maxConcurrency
+	}
+	return limit
+}
+
 func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -913,16 +936,7 @@ func newMux() *http.ServeMux {
 			return
 		}
 
-		limit := 10
-		if l := r.Header.Get("X-Concurrency"); l != "" {
-			fmt.Sscanf(l, "%d", &limit)
-		}
-		if limit < 1 {
-			limit = 1
-		}
-		if limit > maxConcurrency {
-			limit = maxConcurrency
-		}
+		limit := concurrencyLimit(r.Header)
 
 		timeout := defaultTimeout
 		if len(reqs) > 0 && reqs[0].Timeout >= minTimeout && reqs[0].Timeout <= maxTimeout {
@@ -1027,16 +1041,7 @@ func newMux() *http.ServeMux {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
-		limit := 10
-		if l := r.Header.Get("X-Concurrency"); l != "" {
-			fmt.Sscanf(l, "%d", &limit)
-		}
-		if limit < 1 {
-			limit = 1
-		}
-		if limit > maxConcurrency {
-			limit = maxConcurrency
-		}
+		limit := concurrencyLimit(r.Header)
 
 		timeout := defaultTimeout
 		if len(reqs) > 0 && reqs[0].Timeout >= minTimeout && reqs[0].Timeout <= maxTimeout {
