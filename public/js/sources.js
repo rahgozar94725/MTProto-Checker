@@ -192,6 +192,34 @@ export function rateBySourceId(sources, sourceUrls = []) {
     return sourceUrls.map(url => byKey.get(shortUrl(url)) || 0);
 }
 
+// → the proxies minus the ones published *only* by sources the user turned off. Disabling a
+// list means "stop scanning what nothing else carries", not "stop scanning": a proxy one
+// enabled source also publishes stays, and so does a proxy the snapshot never attributed —
+// including everything the user pasted or fetched from a list of their own.
+//
+// The snapshot is one concatenated file, so this is the only place a disabled built-in can be
+// acted on at all; until it existed, a disabled source stopped ranking and nothing else.
+//
+// A `src=` id no header slot declares, and a header url the model has never heard of, are both
+// kept. The model cannot judge a source it cannot identify, and guessing would silently delete
+// links off a list the user never disabled.
+export function dropDisabledSources(proxies, { attribution = new Map(), sources = [], sourceUrls = [] } = {}) {
+    const disabled = new Set(sources.filter(source => !source.enabled).map(source => shortUrl(source.url)));
+    if (disabled.size === 0) return proxies;
+
+    const disabledIds = new Set();
+    sourceUrls.forEach((url, id) => {
+        if (typeof url === 'string' && disabled.has(shortUrl(url))) disabledIds.add(id);
+    });
+    if (disabledIds.size === 0) return proxies;
+
+    return proxies.filter(proxy => {
+        const meta = attribution.get(proxyKey(proxy));
+        if (!meta) return true;
+        return meta.srcs.some(id => !disabledIds.has(id));
+    });
+}
+
 // → the proxies reordered for scanning: most-redundant first, then best-scoring source first.
 // File order is scan order on the server (`/check-stream` walks the request body in order), so
 // this is what decides which proxies a user watching the first rows actually sees.

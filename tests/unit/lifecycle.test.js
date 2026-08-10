@@ -490,6 +490,47 @@ test('a user source that fails does not cost the snapshot that succeeded', async
     }
 });
 
+test('a disabled built-in keeps its exclusive links out of the load', async () => {
+    const app = await mountApp({
+        fetch: respondToLoad({ live: SNAPSHOT_TEXT }),
+        // SNAPSHOT_TEXT publishes link 0 from source 0 alone and link 1 from both.
+        storage: { sources: JSON.stringify([{ url: DEFAULT_SOURCES[0], enabled: false }]) },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), [SNAPSHOT_LINKS[1]],
+            'the link the other source also publishes stays');
+        assert.equal(toastText(app), interpolate(fa.toastSnapshotLoaded, { n: 1 }));
+        assert.match(app.document.getElementById('console').textContent, /Dropped 1 link/);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('disabling every source leaves nothing to load, and says so', async () => {
+    const app = await mountApp({
+        fetch: respondToLoad({ live: SNAPSHOT_TEXT }),
+        storage: { sources: JSON.stringify(DEFAULT_SOURCES.map(url => ({ url, enabled: false }))) },
+    });
+    try {
+        paste(app, link('192.0.2.99'));
+        click(app, 'loadListBtn');
+        await waitFor(() => toastText(app) !== '', 'the failure toast');
+
+        assert.equal(app.document.getElementById('inputProxies').value, link('192.0.2.99'),
+            'an empty load must not cost the user their paste');
+
+        const errors = [...app.document.querySelectorAll('#console .error-log')];
+        assert.equal(errors.length, 1);
+        assert.match(errors[0].textContent, /Dropped 2 links/);
+        assert.equal(app.document.getElementById('consoleDrawer').open, true);
+    } finally {
+        app.cleanup();
+    }
+});
+
 // --- the SOCKS5 proxy the server fetches through -------------------------------------
 
 function typeInto(app, id, value) {
@@ -835,7 +876,9 @@ test('proxies tied on redundancy are posted best-scoring source first', async ()
     }
 });
 
-test('a disabled source stops pulling its proxies up the scan order', async () => {
+// Disabling used to affect ranking alone; it now decides what is loaded, so the proxy only the
+// disabled source published never reaches the request at all.
+test('a disabled source keeps its exclusive proxies out of the scan entirely', async () => {
     const app = await mountApp({
         fetch: respondToSnapshot(TIE_SNAPSHOT, respondWith(body([doneFrame()]))),
         storage: { sources: storedScores({ secondEnabled: false }) },
@@ -846,9 +889,8 @@ test('a disabled source stops pulling its proxies up the scan order', async () =
         click(app, 'startBtn');
         await waitFor(() => isIdle(app), 'the scan to finish');
 
-        // Both sources rate zero now, so the tie falls back to file order.
         const posted = JSON.parse(app.recorded.fetches.at(-1).init.body);
-        assert.deepEqual(posted.map(p => p.secret), [TIE_SECRETS[0], TIE_SECRETS[1]]);
+        assert.deepEqual(posted.map(p => p.secret), [TIE_SECRETS[0]]);
     } finally {
         app.cleanup();
     }

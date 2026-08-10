@@ -12,6 +12,7 @@ import {
 import { createScanState } from './state.js';
 import { parseSnapshot } from './snapshot.js';
 import {
+    dropDisabledSources,
     orderForScan,
     parseSources,
     rateBySourceId,
@@ -676,7 +677,19 @@ async function loadSnapshot() {
 
     // Deduped as one list rather than concatenated: two lists carrying the same proxy is the
     // ordinary case, and the scan would otherwise be posted the same link twice.
-    const { proxies } = parseProxyList([snapshot ? snapshot.links.join('\n') : '', userText].join('\n'));
+    const { proxies: loaded } = parseProxyList([snapshot ? snapshot.links.join('\n') : '', userText].join('\n'));
+    // Applied at load time and nowhere else: after this the textarea is the truth, so a source
+    // toggled off later does not reach back into a list the user is looking at.
+    const proxies = dropDisabledSources(loaded, {
+        attribution: state.snapshotAttribution,
+        sources,
+        sourceUrls: snapshotSourceUrls,
+    });
+    const dropped = loaded.length - proxies.length;
+    // An error when it emptied the load, since the drawer opening is the only thing that
+    // explains a button that appears to have done nothing.
+    if (dropped > 0) log(`Dropped ${dropped} links published only by sources you disabled.`, proxies.length === 0);
+
     if (proxies.length === 0) {
         // The textarea is deliberately left alone: a failed load must not cost the user
         // whatever they had already pasted.
