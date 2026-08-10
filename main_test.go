@@ -385,20 +385,27 @@ func BenchmarkBatchPipeline(b *testing.B) {
 // The three loopback spellings are the ones a browser can legitimately carry
 // for a server bound to loopback; a non-loopback bind has no fixed name to
 // pin, which is why it yields nil and turns the check off.
+//
+// The entries are host names without a port, and the port the server bound is
+// deliberately not part of them: the port a browser puts in Host is the one it
+// was told to connect to, which is not the bound one behind `ssh -L`, `docker
+// run -p` or any other forward, and is absent entirely when the bound port is
+// the scheme default. Pinning it refused the real page in all three cases and
+// bought nothing -- a rebound name is refused on the name.
 func TestHostAllowlist(t *testing.T) {
 	tests := []struct {
 		addr string
 		want []string
 	}{
-		{"127.0.0.1:3000", []string{"127.0.0.1:3000", "localhost:3000", "[::1]:3000"}},
-		{"localhost:8080", []string{"127.0.0.1:8080", "localhost:8080", "[::1]:8080"}},
-		{"[::1]:3000", []string{"127.0.0.1:3000", "localhost:3000", "[::1]:3000"}},
+		{"127.0.0.1:3000", []string{"127.0.0.1", "localhost", "::1"}},
+		{"localhost:8080", []string{"127.0.0.1", "localhost", "::1"}},
+		{"[::1]:3000", []string{"127.0.0.1", "localhost", "::1"}},
 		// The whole of 127/8 is loopback, and HOST=127.0.0.2 is how a second
 		// instance sidesteps a port conflict. shouldOpenBrowser accepts it and
 		// opens the browser there, so leaving the bound address out of the list
 		// 403s every POST on a page the server itself launched -- with the map
 		// non-empty, so the WARNING line does not fire either.
-		{"127.0.0.2:3000", []string{"127.0.0.2:3000", "127.0.0.1:3000", "localhost:3000", "[::1]:3000"}},
+		{"127.0.0.2:3000", []string{"127.0.0.2", "127.0.0.1", "localhost", "::1"}},
 		{"0.0.0.0:3000", nil},
 		{"192.168.1.5:3000", nil},
 		{"[::]:3000", nil},
@@ -417,6 +424,30 @@ func TestHostAllowlist(t *testing.T) {
 			if _, ok := got[host]; !ok {
 				t.Errorf("hostAllowlist(%q) is missing %q (got %v)", tt.addr, host, got)
 			}
+		}
+	}
+}
+
+// The Host a browser sends carries a port only when it is not the scheme
+// default, and carries an IPv6 literal in brackets. Both spellings have to
+// reduce to the same name the allowlist holds, or the guard refuses the page
+// on punctuation.
+func TestHostWithoutPort(t *testing.T) {
+	tests := []struct{ host, want string }{
+		{"127.0.0.1:3000", "127.0.0.1"},
+		{"127.0.0.1", "127.0.0.1"},
+		{"localhost:8080", "localhost"},
+		{"localhost", "localhost"},
+		{"[::1]:3000", "::1"},
+		{"[::1]", "::1"},
+		{"::1", "::1"},
+		{"evil.test:3000", "evil.test"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		if got := hostWithoutPort(tt.host); got != tt.want {
+			t.Errorf("hostWithoutPort(%q) = %q, want %q", tt.host, got, tt.want)
 		}
 	}
 }
