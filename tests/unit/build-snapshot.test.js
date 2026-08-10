@@ -19,6 +19,10 @@ import {
     snapshotLines,
     buildSnapshot,
     fetchAll,
+    driftBand,
+    checkDrift,
+    baselineFrom,
+    checksumLine,
 } from '../../scripts/build-snapshot.mjs';
 import { parseLink, parseProxyList, proxyKey } from '../../public/js/parse.js';
 
@@ -172,4 +176,99 @@ test('fetchAll rejects when a source cannot be reached at all', async () => {
     const fetchImpl = async () => { throw new Error('getaddrinfo ENOTFOUND'); };
 
     await assert.rejects(() => fetchAll(URLS, { fetchImpl }), /ENOTFOUND/);
+});
+
+// --- the volume drift guard ------------------------------------------------
+//
+// The 17 sources are third-party repositories fetched by mutable branch ref and the result
+// is embedded into every release binary, so "it parsed" is not evidence that a source is
+// still honest. The guard fails the build closed when a source's volume moves past its band,
+// which is the tripwire for a list being flooded with attacker-chosen entries. It does not
+// catch a source whose contents are replaced at constant volume — that residual is recorded
+// in the script and in CLAUDE.md, not covered here.
+
+// A baseline in the file's own shape, matching the fixture URLs.
+const BASELINE = {
+    sources: URLS.map((url, src) => ({ src, url: shortUrl(url), unique: 100 })),
+};
+
+const withCounts = (...counts) => ({
+    sources: URLS.map((url, src) => ({ src, url: shortUrl(url), unique: counts[src] })),
+});
+
+const observed = (...counts) => counts.map((unique, index) => ({ index, unique, duplicates: 0, spam: 0 }));
+
+test('driftBand is loose enough for daily variation and tight enough to catch a flood', () => {
+    assert.deepEqual(driftBand(100), { low: 40, high: 220 });
+    // Small sources get the slack term, which on the low side means only zero trips them —
+    // and zero is already a build failure through the empty-source check.
+    assert.deepEqual(driftBand(14), { low: -3, high: 48 });
+});
+
+test('checkDrift accepts counts inside the band', () => {
+    assert.doesNotThrow(() => checkDrift(URLS, observed(100, 219, 40), BASELINE));
+});
+
+test('checkDrift rejects a source that suddenly carries far more', () => {
+    assert.throws(() => checkDrift(URLS, observed(100, 100, 221), BASELINE), /flooded/);
+});
+
+test('checkDrift rejects a source that has been gutted', () => {
+    assert.throws(() => checkDrift(URLS, observed(100, 39, 100), BASELINE), /gutted/);
+});
+
+// `src=` ids are positions in DEFAULT_SOURCES, so a reorder re-attributes every line of
+// every snapshot ever published. The baseline carries the urls precisely so that a reorder
+// cannot pass as ordinary drift.
+test('checkDrift rejects a reordered source list', () => {
+    const reordered = { sources: BASELINE.sources.map((row, i) => ({ ...row, url: BASELINE.sources[(i + 1) % 3].url })) };
+
+    assert.throws(() => checkDrift(URLS, observed(100, 100, 100), reordered), /reordered or replaced/);
+});
+
+test('checkDrift rejects a baseline that does not cover every source', () => {
+    assert.throws(() => checkDrift(URLS, observed(100, 100, 100), { sources: BASELINE.sources.slice(0, 2) }),
+        /--write-baseline/);
+    assert.throws(() => checkDrift(URLS, observed(100, 100, 100), {}), /--write-baseline/);
+});
+
+test('buildSnapshot runs the guard when a baseline is supplied and skips it otherwise', () => {
+    // The fixtures carry two links per source, so a baseline of 1000 is far below the band.
+    const mismatched = withCounts(1000, 1000, 1000);
+
+    assert.throws(() => buildSnapshot({ urls: URLS, texts: TEXTS, generatedAt: GENERATED_AT, baseline: mismatched }),
+        /drift/);
+    assert.doesNotThrow(() => buildSnapshot({ urls: URLS, texts: TEXTS, generatedAt: GENERATED_AT }));
+});
+
+test('baselineFrom round-trips through checkDrift', () => {
+    const { perSource } = collect(TEXTS);
+    const written = baselineFrom(URLS, perSource, GENERATED_AT);
+
+    assert.deepEqual(written.sources.map(s => s.src), [0, 1, 2]);
+    assert.equal(written.generatedAt, GENERATED_AT);
+    assert.doesNotThrow(() => checkDrift(URLS, perSource, written));
+});
+
+// The committed baseline is what the nightly job actually runs against, so it has to agree
+// with DEFAULT_SOURCES position for position. A source appended without a baseline bump
+// reds every nightly run until someone looks at it, which is the intended failure.
+test('the committed baseline covers DEFAULT_SOURCES in order', () => {
+    const baseline = JSON.parse(readFileSync(
+        fileURLToPath(new URL('../../scripts/snapshot-baseline.json', import.meta.url)), 'utf8'));
+
+    assert.equal(baseline.sources.length, SOURCES.length);
+    baseline.sources.forEach((row, i) => {
+        assert.equal(row.src, i);
+        assert.equal(row.url, shortUrl(SOURCES[i]));
+        assert.ok(Number.isInteger(row.unique) && row.unique > 0, `source ${i} has no baseline count`);
+    });
+});
+
+// release.yml pipes this straight into `sha256sum -c`, so the format is a contract.
+test('checksumLine is sha256sum -c format over the snapshot text', () => {
+    const line = checksumLine('hello\n', 'snapshot.txt');
+
+    assert.equal(line, '5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03  snapshot.txt\n');
+    assert.notEqual(checksumLine('hello\n', 'snapshot.txt'), checksumLine('hello!\n', 'snapshot.txt'));
 });

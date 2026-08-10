@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/exec"
@@ -20,6 +21,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -45,17 +47,27 @@ const (
 	maxBodySize  = 8 * 1024 * 1024
 	maxBatchSize = 10_000
 	// A public proxy list is tens of KiB; the whole 17-source corpus is
-	// ~233 KB. 5 MiB per source is far above anything plausible and is
+	// ~233 KB. 1 MiB per source is far above anything plausible and is
 	// enforced while reading, so an endless response is cut off, not buffered.
-	maxSourceBytes     = 5 * 1024 * 1024
-	maxSources         = 20
-	maxConcurrency     = 50
-	defaultTimeout     = 5
-	minTimeout         = 3
-	maxTimeout         = 30
-	tcpTimeout         = 1500 * time.Millisecond
-	minTimeoutDuration = time.Duration(minTimeout) * time.Second
-	shutdownTimeout    = 5 * time.Second
+	//
+	// maxSourceBytes alone bounds nothing useful: /fetch-sources buffers every
+	// source whole until the last one lands, so the per-request ceiling is what
+	// actually caps resident memory. maxSources sources at maxSourceBytes each
+	// would be 20 MiB per request with nothing limiting how many requests run at
+	// once, so the two limits are enforced together — maxRequestSourceBytes is a
+	// budget the sources of one request share, and maxFetchSourcesInFlight caps
+	// the number of requests holding one.
+	maxSourceBytes          = 1024 * 1024
+	maxRequestSourceBytes   = 4 * 1024 * 1024
+	maxFetchSourcesInFlight = 4
+	maxSources              = 20
+	maxConcurrency          = 50
+	defaultTimeout          = 5
+	minTimeout              = 3
+	maxTimeout              = 30
+	tcpTimeout              = 1500 * time.Millisecond
+	minTimeoutDuration      = time.Duration(minTimeout) * time.Second
+	shutdownTimeout         = 5 * time.Second
 )
 
 type dnsCacheEntry struct {
@@ -99,6 +111,11 @@ func cachedLookupHost(host string) ([]net.IP, error) {
 // writes it.
 var sourceTimeout = 30 * time.Second
 
+// fetchSourcesSlots caps how many /fetch-sources requests hold source bodies in
+// memory at once. Package-level and buffered, the same shape as the check
+// endpoints' concurrency semaphore.
+var fetchSourcesSlots = make(chan struct{}, maxFetchSourcesInFlight)
+
 // The SSRF policy for /fetch-sources. The server fetches arbitrary URLs on
 // request and HOST=0.0.0.0 is a supported deployment with no auth and no
 // origin check, so an unchecked source URL is a request-forgery primitive
@@ -115,16 +132,70 @@ var (
 	allowedSourceIP       func(net.IP) bool
 )
 
+// blockedSourceNets is the destination denylist, written as CIDRs because the
+// net.IP predicates alone leave real holes. IsPrivate covers 10/8, 172.16/12,
+// 192.168/16 and fc00::/7 and nothing else, so without this list a source URL
+// could reach:
+//
+//   - 100.64.0.0/10, the shared-address range. Tailscale gives every peer a
+//     100.x address and puts MagicDNS on 100.100.100.100, and a user who needs
+//     a proxy checker is exactly the user likely to be on a tailnet.
+//   - ::/96, IPv4-compatible IPv6. ::127.0.0.1 is 16 bytes, so To4 returns nil
+//     and IsLoopback is false. The whole range is deprecated; block it outright.
+//   - 64:ff9b::/96 and 64:ff9b:1::/48, the NAT64 prefixes. On a NAT64 network
+//     64:ff9b::7f00:1 is translated to 127.0.0.1 at the gateway, past every
+//     check this process can make.
+//   - 2002::/16 (6to4) and 2001::/32 (Teredo), which tunnel an embedded IPv4
+//     address the check would otherwise never see.
+//   - 198.18.0.0/15, 192.0.0.0/24, 240.0.0.0/4 and 255.255.255.255, none of
+//     which a public proxy list is ever served from.
+//
+// v4-mapped addresses (::ffff:a.b.c.d) are normalized by Unmap before the match,
+// so they are judged against the v4 rows rather than needing rows of their own —
+// which is also why ::ffff:0:0/96 is deliberately absent: a row for it would
+// block every mapped address, including legitimate public ones.
+var blockedSourceNets = func() []netip.Prefix {
+	raw := []string{
+		"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
+		"169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.168.0.0/16",
+		"198.18.0.0/15", "224.0.0.0/4", "240.0.0.0/4",
+		"::/96", "64:ff9b::/96", "64:ff9b:1::/48", "100::/64",
+		"2001::/32", "2002::/16", "fc00::/7", "fe80::/10", "fec0::/10",
+		"ff00::/8",
+	}
+	nets := make([]netip.Prefix, 0, len(raw))
+	for _, s := range raw {
+		nets = append(nets, netip.MustParsePrefix(s))
+	}
+	return nets
+}()
+
 // blockedSourceIP reports whether ip is a destination no source fetch may
-// reach: the machine itself, the link-local range that carries cloud metadata
-// services, and the private networks behind it.
+// reach: the machine itself, the ranges that carry cloud metadata services, and
+// the private, shared and tunnelling networks behind it. The predicates are kept
+// alongside the CIDR list rather than replaced by it — they cost nothing and
+// they cover anything the list forgets.
 func blockedSourceIP(ip net.IP) bool {
 	if allowedSourceIP != nil && allowedSourceIP(ip) {
 		return false
 	}
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
 		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsInterfaceLocalMulticast() || ip.IsMulticast()
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() {
+		return true
+	}
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		// Not 4 or 16 bytes: not an address this process can reason about.
+		return true
+	}
+	addr = addr.Unmap()
+	for _, prefix := range blockedSourceNets {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkSourceURL enforces the scheme allowlist. Destinations are not checked
@@ -199,6 +270,16 @@ func socks5Client(cfg *SOCKS5Config) (*http.Client, error) {
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return errors.New("stopped after 10 redirects")
+			}
+			// A hop may not change the scheme. Without this an https source can
+			// answer 302 Location: http://…, and because this leg accepts plain
+			// HTTP the body then crosses everything past the proxy in the clear
+			// — for Tor, the exit node — which is a list-rewriting position over
+			// a URL the user believes is TLS-protected. http is allowed here
+			// only for a URL the user typed that way.
+			if req.URL.Scheme != via[0].URL.Scheme {
+				return errors.Errorf("redirect changed scheme %q -> %q",
+					via[0].URL.Scheme, req.URL.Scheme)
 			}
 			return checkSourceURL(req.URL.String(), true)
 		},
@@ -463,23 +544,76 @@ func openBrowser(url string) {
 // retried through it — which is also the only way a plain-HTTP source is ever
 // fetched. Each attempt carries its own deadline, so one source can cost up to
 // two sourceTimeouts.
-func fetchSource(ctx context.Context, socks *http.Client, url string) (string, error) {
-	text, err := fetchVia(ctx, sourceClient, url, false)
+//
+// The retry re-applies the whole policy rather than inheriting the direct
+// attempt's verdict: checkSourceURL runs again with viaSOCKS5 set, which is what
+// admits http://, and checkSOCKS5Destination re-checks the destination before
+// the proxy is dialled. A retry is cheap when it cannot succeed — a scheme the
+// SOCKS5 leg also rejects fails inside fetchVia before anything is dialled — so
+// no attempt is made to predict which failures are worth retrying.
+func fetchSource(ctx context.Context, socks *http.Client, url string, budget *byteBudget) (string, error) {
+	text, err := fetchVia(ctx, sourceClient, url, false, budget)
 	if err == nil || socks == nil {
 		return text, err
 	}
-	log.Printf("SOURCE DIRECT FAIL %s: %v — retrying through SOCKS5", url, err)
-	return fetchVia(ctx, socks, url, true)
+	log.Printf("SOURCE DIRECT FAIL %q: %v — retrying through SOCKS5", url, err)
+	return fetchVia(ctx, socks, url, true, budget)
+}
+
+// byteBudget is the total a request's sources may read between them, spent as
+// the bodies arrive rather than reserved up front — reserving would hand the
+// whole budget to whichever sources started first and starve the rest.
+//
+// take never spends more than is left, so the budget cannot go negative and a
+// request cannot hold more than its ceiling. Overshoot is one Read buffer per
+// concurrent source, since a source learns it is out of budget only after the
+// copy that exhausted it.
+type byteBudget struct{ left atomic.Int64 }
+
+func newByteBudget(n int64) *byteBudget {
+	b := &byteBudget{}
+	b.left.Store(n)
+	return b
+}
+
+func (b *byteBudget) take(n int64) bool {
+	for {
+		left := b.left.Load()
+		if left < n {
+			return false
+		}
+		if b.left.CompareAndSwap(left, left-n) {
+			return true
+		}
+	}
+}
+
+// budgetReader charges every byte read to the shared budget and fails the read
+// once it is gone, so an oversized set of sources is cut off mid-body the same
+// way a single oversized source is.
+type budgetReader struct {
+	r io.Reader
+	b *byteBudget
+}
+
+func (br *budgetReader) Read(p []byte) (int, error) {
+	n, err := br.r.Read(p)
+	if n > 0 && !br.b.take(int64(n)) {
+		return 0, errors.Errorf("request exceeds its %d byte source budget", maxRequestSourceBytes)
+	}
+	return n, err
 }
 
 // fetchVia performs one attempt under its own deadline. The body is read
-// through a LimitReader one byte past the cap, so an oversized source is cut
-// off mid-read and rejected instead of being buffered whole.
+// through a LimitReader one byte past the per-source cap and through the
+// request's shared budget, so neither one oversized source nor twenty ordinary
+// ones can be buffered past the ceiling — an endless response is cut off
+// mid-read rather than held whole.
 //
 // The URL clears the scheme allowlist before anything is dialled, and the
 // client rejects the destination itself: after resolution for sourceClient, and
 // before the proxy is dialled for a SOCKS5 client.
-func fetchVia(ctx context.Context, client *http.Client, url string, viaSOCKS5 bool) (string, error) {
+func fetchVia(ctx context.Context, client *http.Client, url string, viaSOCKS5 bool, budget *byteBudget) (string, error) {
 	if err := checkSourceURL(url, viaSOCKS5); err != nil {
 		return "", err
 	}
@@ -501,7 +635,10 @@ func fetchVia(ctx context.Context, client *http.Client, url string, viaSOCKS5 bo
 		return "", errors.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSourceBytes+1))
+	body, err := io.ReadAll(&budgetReader{
+		r: io.LimitReader(resp.Body, maxSourceBytes+1),
+		b: budget,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -854,6 +991,20 @@ func newMux() *http.ServeMux {
 			return
 		}
 
+		// Every other endpoint on this server is bounded — the check handlers by
+		// the X-Concurrency semaphore, the SSE writer by streaming rather than
+		// buffering. This one holds its sources in memory until the last of them
+		// lands, so without a cap on requests in flight the per-request budget
+		// below would multiply by however many callers show up at once. Waiting
+		// rather than refusing: the UI issues these one after another, and a
+		// caller that gives up takes its slot request with it.
+		select {
+		case fetchSourcesSlots <- struct{}{}:
+			defer func() { <-fetchSourcesSlots }()
+		case <-r.Context().Done():
+			return
+		}
+
 		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 
 		var req FetchSourcesRequest
@@ -891,14 +1042,17 @@ func newMux() *http.ServeMux {
 		// request order regardless of which source answers first. A failed
 		// source contributes nothing and aborts nothing.
 		texts := make([]string, len(req.URLs))
+		budget := newByteBudget(maxRequestSourceBytes)
 		var wg sync.WaitGroup
 		for i, u := range req.URLs {
 			wg.Add(1)
 			go func(idx int, url string) {
 				defer wg.Done()
-				text, err := fetchSource(r.Context(), socks, url)
+				text, err := fetchSource(r.Context(), socks, url, budget)
 				if err != nil {
-					log.Printf("SOURCE FAIL %s: %v", url, err)
+					// %q, not %s: the URL is caller-supplied, and a raw newline
+					// in it would forge a log line.
+					log.Printf("SOURCE FAIL %q: %v", url, err)
 					return
 				}
 				texts[idx] = text

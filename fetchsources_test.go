@@ -42,6 +42,13 @@ func allowLoopbackSources(t *testing.T) {
 	t.Cleanup(func() { allowPlainHTTPSources = orig })
 }
 
+// testBudget is the byte budget a direct fetchSource call runs under. Full
+// size, so no test is bounded by it accidentally — the budget itself is tested
+// by giving it a deliberately small one.
+func testBudget() *byteBudget {
+	return newByteBudget(maxRequestSourceBytes)
+}
+
 // fetchSources posts a {"urls": …} body built from urls and returns the
 // recorded response.
 func fetchSources(t *testing.T, urls ...string) *httptest.ResponseRecorder {
@@ -224,7 +231,7 @@ func TestFetchSourcesRejectsAnOversizedSourceWithoutBufferingIt(t *testing.T) {
 func TestFetchSourceRejectsPlainHTTP(t *testing.T) {
 	allowLoopbackDestinations(t)
 
-	_, err := fetchSource(context.Background(), nil, "http://127.0.0.1:9/list.txt")
+	_, err := fetchSource(context.Background(), nil, "http://127.0.0.1:9/list.txt", testBudget())
 
 	if err == nil {
 		t.Fatal("fetchSource accepted an http:// source, want it rejected")
@@ -243,7 +250,7 @@ func TestFetchSourceRejectsANonHTTPScheme(t *testing.T) {
 		"gopher://example.com/",
 		"tg://proxy?server=192.0.2.1",
 	} {
-		if _, err := fetchSource(context.Background(), nil, raw); err == nil {
+		if _, err := fetchSource(context.Background(), nil, raw, testBudget()); err == nil {
 			t.Errorf("fetchSource(%q) = nil error, want it rejected", raw)
 		}
 	}
@@ -261,7 +268,7 @@ func TestFetchSourceRejectsAPrivateDestination(t *testing.T) {
 		"https://172.16.0.1/list.txt",
 		"https://169.254.169.254/latest/meta-data/",
 	} {
-		_, err := fetchSource(context.Background(), nil, raw)
+		_, err := fetchSource(context.Background(), nil, raw, testBudget())
 		if err == nil {
 			t.Errorf("fetchSource(%q) = nil error, want it rejected", raw)
 			continue
@@ -275,7 +282,7 @@ func TestFetchSourceRejectsAPrivateDestination(t *testing.T) {
 // Loopback is blocked by the same check — the hermetic tests reach 127.0.0.1
 // only because they exempt it explicitly.
 func TestFetchSourceRejectsALoopbackDestination(t *testing.T) {
-	_, err := fetchSource(context.Background(), nil, "https://127.0.0.1:9/list.txt")
+	_, err := fetchSource(context.Background(), nil, "https://127.0.0.1:9/list.txt", testBudget())
 
 	if err == nil {
 		t.Fatal("fetchSource accepted a loopback source, want it rejected")
@@ -296,7 +303,7 @@ func TestFetchSourceDoesNotFollowARedirectToAPrivateDestination(t *testing.T) {
 	}))
 	t.Cleanup(redirect.Close)
 
-	text, err := fetchSource(context.Background(), nil, redirect.URL+"/list.txt")
+	text, err := fetchSource(context.Background(), nil, redirect.URL+"/list.txt", testBudget())
 
 	if err == nil {
 		t.Fatalf("followed the redirect and returned %q, want an error", text)
@@ -617,5 +624,228 @@ func TestFetchSourcesChecksARedirectOnTheSOCKS5Path(t *testing.T) {
 	wantDest := strings.TrimPrefix(redirect.URL, "http://")
 	if dests := socks.destinations(); len(dests) != 1 || dests[0] != wantDest {
 		t.Errorf("proxy destinations = %v, want only the first hop [%s]", dests, wantDest)
+	}
+}
+
+// The destination policy is a denylist, and the predicates it is built on cover
+// less than they look like they do: net.IP.IsPrivate knows 10/8, 172.16/12,
+// 192.168/16 and fc00::/7 and nothing else. This is the table that pins the
+// rest — every row is a range something real lives in, and the want=false rows
+// are what stops the list from being widened into blocking public addresses.
+func TestBlockedSourceIPCoversTheReservedRanges(t *testing.T) {
+	for _, tc := range []struct {
+		ip   string
+		want bool
+		why  string
+	}{
+		// Covered by the predicates.
+		{"127.0.0.1", true, "loopback"},
+		{"::1", true, "loopback v6"},
+		{"10.0.0.1", true, "private"},
+		{"172.16.0.1", true, "private"},
+		{"192.168.1.1", true, "private"},
+		{"169.254.169.254", true, "link-local, the cloud metadata address"},
+		{"::ffff:169.254.169.254", true, "v4-mapped link-local"},
+		{"0.0.0.0", true, "unspecified"},
+		{"::", true, "unspecified v6"},
+		{"fd00::1", true, "unique local"},
+		{"fe80::1", true, "link-local v6"},
+		{"224.0.0.1", true, "multicast"},
+		{"ff02::1", true, "multicast v6"},
+
+		// Covered only by blockedSourceNets.
+		{"100.64.0.1", true, "shared address space (CGNAT)"},
+		{"100.100.100.100", true, "Tailscale MagicDNS"},
+		{"100.101.102.103", true, "a tailnet peer"},
+		{"::127.0.0.1", true, "v4-compatible v6 loopback — To4 is nil, so IsLoopback is false"},
+		{"64:ff9b::7f00:1", true, "NAT64 of 127.0.0.1"},
+		{"64:ff9b::a9fe:a9fe", true, "NAT64 of 169.254.169.254"},
+		{"64:ff9b:1::1", true, "local-use NAT64"},
+		{"100::1", true, "discard-only"},
+		{"2001::1", true, "Teredo"},
+		{"2002:7f00:1::", true, "6to4 wrapping 127.0.0.1"},
+		{"fec0::1", true, "deprecated site-local"},
+		{"198.18.0.1", true, "benchmarking"},
+		{"192.0.0.1", true, "IETF protocol assignments"},
+		{"240.0.0.1", true, "reserved"},
+		{"255.255.255.255", true, "broadcast"},
+
+		// Public. A row that flips to true here is a source the tool can no
+		// longer fetch, which is the cost of widening the list carelessly.
+		{"1.1.1.1", false, "public"},
+		{"8.8.8.8", false, "public"},
+		{"185.199.108.133", false, "raw.githubusercontent.com"},
+		{"::ffff:8.8.8.8", false, "v4-mapped public — unmapped before the match"},
+		{"2606:4700::1111", false, "public v6"},
+		{"99.255.255.255", false, "just below the shared range"},
+		{"100.128.0.1", false, "just above the shared range"},
+	} {
+		ip := net.ParseIP(tc.ip)
+		if ip == nil {
+			t.Fatalf("test bug: %q is not an IP", tc.ip)
+		}
+		if got := blockedSourceIP(ip); got != tc.want {
+			t.Errorf("blockedSourceIP(%s) = %v, want %v — %s", tc.ip, got, tc.want, tc.why)
+		}
+	}
+}
+
+// The SOCKS5 leg accepts plain HTTP, which is what makes a scheme-changing
+// redirect a downgrade: an https source answers 302 Location: http://…, and the
+// body then crosses everything past the proxy — for Tor, the exit node — in the
+// clear, in a position to rewrite the proxy list. Checked on the client's own
+// CheckRedirect because reaching it end to end would need a real TLS upstream.
+func TestSOCKS5RedirectMayNotChangeScheme(t *testing.T) {
+	client, err := socks5Client(&SOCKS5Config{Addr: "127.0.0.1:9"})
+	if err != nil {
+		t.Fatalf("socks5Client: %v", err)
+	}
+
+	hop := func(from, to string) error {
+		via := httptest.NewRequest(http.MethodGet, from, nil)
+		return client.CheckRedirect(httptest.NewRequest(http.MethodGet, to, nil), []*http.Request{via})
+	}
+
+	if err := hop("https://example.com/list.txt", "http://example.com/list.txt"); err == nil {
+		t.Error("https -> http redirect accepted, want it rejected as a downgrade")
+	} else if !strings.Contains(err.Error(), "scheme") {
+		t.Errorf("error = %v, want it to name the scheme", err)
+	}
+	if err := hop("http://example.com/a.txt", "http://example.com/b.txt"); err != nil {
+		t.Errorf("http -> http redirect = %v, want it allowed — plain HTTP is why this leg exists", err)
+	}
+	if err := hop("https://example.com/a.txt", "https://example.com/b.txt"); err != nil {
+		t.Errorf("https -> https redirect = %v, want it allowed", err)
+	}
+}
+
+// A scheme the SOCKS5 leg rejects too is rejected on both attempts, and neither
+// one dials: checkSourceURL is the first thing fetchVia does, before the proxy
+// is reached. This is what makes predicting which failures are worth retrying
+// unnecessary rather than merely unimplemented.
+func TestFetchSourcesNeverDialsTheProxyForARejectedScheme(t *testing.T) {
+	socks := startSOCKS5(t, "", "")
+
+	for _, raw := range []string{"ftp://example.com/list.txt", "file:///etc/passwd"} {
+		rec := fetchSourcesVia(t, map[string]string{"addr": socks.addr}, raw)
+		if body := rec.Body.String(); body != "" {
+			t.Errorf("%s: body = %q, want empty", raw, body)
+		}
+	}
+	if n := socks.connections(); n != 0 {
+		t.Errorf("proxy saw %d connections, want 0 — a rejected scheme must not reach the proxy", n)
+	}
+}
+
+// Every source of a request is buffered until the last one lands, so the
+// per-source cap bounds nothing on its own: maxSources sources at maxSourceBytes
+// each would be twenty times the ceiling. The budget is what the sources share.
+func TestFetchSourcesBoundsTheWholeRequestByASharedBudget(t *testing.T) {
+	allowLoopbackSources(t)
+
+	sources := func(t *testing.T, n int) []string {
+		urls := make([]string, n)
+		for i := range urls {
+			urls[i] = bigSource(t, maxSourceBytes)
+		}
+		return urls
+	}
+
+	// A request that fits arrives whole: the budget must not cost a legitimate
+	// caller anything. The real corpus is ~233 KB across 17 sources, so this is
+	// already an order of magnitude past anything that happens in practice.
+	t.Run("within budget", func(t *testing.T) {
+		const n = 3
+		rec := fetchSources(t, sources(t, n)...)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		if got, want := rec.Body.Len(), n*maxSourceBytes+n; got != want {
+			t.Errorf("body = %d bytes, want %d — a request inside the budget must arrive whole", got, want)
+		}
+	})
+
+	// Past it, the ceiling holds. Which sources survive is deliberately not
+	// asserted: the budget is spent as bodies arrive, so under full contention
+	// every source can be cut mid-body and the answer is empty. That is the
+	// correct outcome for a request that is already past its ceiling — the
+	// guarantee is the bound, not a fair share.
+	t.Run("past budget", func(t *testing.T) {
+		const n = 5
+		rec := fetchSources(t, sources(t, n)...)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		if got := rec.Body.Len(); got > maxRequestSourceBytes+n {
+			t.Errorf("body = %d bytes, want at most the %d byte budget (plus one newline per source)",
+				got, maxRequestSourceBytes)
+		}
+	})
+}
+
+// bigSource serves exactly n bytes over 127.0.0.1.
+func bigSource(t *testing.T, n int) string {
+	t.Helper()
+	body := strings.Repeat("A", n)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// The budget bounds one request; this bounds how many requests hold one. Without
+// it the ceiling is maxRequestSourceBytes times however many callers arrive at
+// once, and /fetch-sources is reachable without auth under HOST=0.0.0.0.
+func TestFetchSourcesCapsRequestsInFlight(t *testing.T) {
+	allowLoopbackSources(t)
+	original := sourceTimeout
+	sourceTimeout = 250 * time.Millisecond
+	t.Cleanup(func() { sourceTimeout = original })
+
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		if inFlight > peak {
+			peak = inFlight
+		}
+		mu.Unlock()
+		<-r.Context().Done()
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+	}))
+	t.Cleanup(hang.Close)
+
+	body, err := json.Marshal(map[string][]string{"urls": {hang.URL}})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	mux := newMux()
+
+	var wg sync.WaitGroup
+	for i := 0; i < maxFetchSourcesInFlight*2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/fetch-sources", strings.NewReader(string(body)))
+			mux.ServeHTTP(httptest.NewRecorder(), req)
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	got := peak
+	mu.Unlock()
+	if got > maxFetchSourcesInFlight {
+		t.Errorf("peak concurrent upstream fetches = %d, want at most %d", got, maxFetchSourcesInFlight)
+	}
+	if got == 0 {
+		t.Error("no upstream fetch was ever entered — the test proved nothing")
 	}
 }

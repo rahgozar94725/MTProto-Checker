@@ -20,7 +20,8 @@
 // The parser is imported from public/js/parse.js and never reimplemented: main_test.go
 // already carries a duplicate Go parser that CLAUDE.md flags as drift-prone.
 
-import { writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { argv, exit, stderr, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
@@ -103,16 +104,85 @@ export function snapshotLines(universe) {
         .map(([, entry]) => formatLine(entry.link, entry.srcs));
 }
 
-// → { text, universe, perSource }. Throws if a source carried no parseable link at all:
+// The volume drift guard. The 17 sources are third-party repositories fetched by mutable
+// branch ref, and this snapshot is embedded into every release binary and loaded into the
+// user's textarea by one click — so a takeover of any one of them is a position to put
+// attacker-operated proxies in front of every user, and "it parsed" is not evidence of
+// anything. Pinning each source to a commit SHA would close that properly and is what the
+// audit asked for first; it is also unavailable here, because these files are rewritten
+// daily and pinning them freezes the freshness the nightly rebuild exists to deliver.
+//
+// So the build fails closed on volume instead: a source that suddenly carries twice what it
+// used to has to be looked at by a human before it ships. The bands are deliberately loose —
+// this is a tripwire for a list being flooded, not a linter for daily variation.
+//
+// Known residual, and it is not small: a source whose contents are *replaced* rather than
+// appended to keeps its count and passes. Catching that needs a churn comparison against the
+// previous snapshot, which is a separate change.
+const DRIFT_FACTOR = 2;
+const DRIFT_SLACK = 20;
+
+export function driftBand(baseline) {
+    return {
+        low: Math.ceil((baseline - DRIFT_SLACK) / DRIFT_FACTOR),
+        high: baseline * DRIFT_FACTOR + DRIFT_SLACK,
+    };
+}
+
+// Throws when the observed counts have moved past the band, when the source list has changed
+// length, or when a source has moved position — the last one because `src=` ids are positions
+// in DEFAULT_SOURCES, so a reorder silently re-attributes every line of every past snapshot
+// and the baseline is the only file that would notice.
+export function checkDrift(urls, perSource, baseline) {
+    const rows = baseline?.sources;
+    if (!Array.isArray(rows) || rows.length !== urls.length) {
+        throw new Error(
+            `baseline covers ${Array.isArray(rows) ? rows.length : 'no'} sources, DEFAULT_SOURCES has ${urls.length}` +
+            ' — rebuild it with --write-baseline after reviewing the change'
+        );
+    }
+
+    const problems = [];
+    for (const s of perSource) {
+        const row = rows[s.index];
+        const short = shortUrl(urls[s.index]);
+        if (row.url !== short) {
+            problems.push(`${s.index}: baseline holds ${row.url}, DEFAULT_SOURCES holds ${short} — sources were reordered or replaced`);
+            continue;
+        }
+        const { low, high } = driftBand(row.unique);
+        if (s.unique > high) {
+            problems.push(`${s.index} ${short}: ${s.unique} links, baseline ${row.unique} (max ${high}) — flooded?`);
+        } else if (s.unique < low) {
+            problems.push(`${s.index} ${short}: ${s.unique} links, baseline ${row.unique} (min ${low}) — gutted or reformatted?`);
+        }
+    }
+    if (problems.length > 0) {
+        throw new Error(`source volume drift:\n  ${problems.join('\n  ')}`);
+    }
+}
+
+// The counts observed by this run, in the file's own shape.
+export function baselineFrom(urls, perSource, generatedAt) {
+    return {
+        note: 'Per-source link counts the drift guard in build-snapshot.mjs compares against. Bump deliberately, never automatically.',
+        generatedAt,
+        sources: perSource.map(s => ({ src: s.index, url: shortUrl(urls[s.index]), unique: s.unique })),
+    };
+}
+
+// → { text, universe, perSource }. Throws if a source carried no parseable link at all —
 // a source that has gone to a 404 page or changed format silently is a build failure, not
-// a smaller snapshot.
-export function buildSnapshot({ urls, texts, generatedAt }) {
+// a smaller snapshot — and, when a baseline is supplied, if any source's volume has drifted
+// past its band.
+export function buildSnapshot({ urls, texts, generatedAt, baseline }) {
     const { universe, perSource } = collect(texts);
 
     const empty = perSource.filter(s => s.unique === 0);
     if (empty.length > 0) {
         throw new Error(`no parseable link from: ${empty.map(s => `${s.index} ${shortUrl(urls[s.index])}`).join(', ')}`);
     }
+    if (baseline) checkDrift(urls, perSource, baseline);
 
     const header = [
         `# generated ${generatedAt} by scripts/build-snapshot.mjs`,
@@ -137,27 +207,48 @@ export async function fetchAll(urls, { fetchImpl = fetch, timeoutMs = FETCH_TIME
     }));
 }
 
-async function main(output) {
+const BASELINE_PATH = fileURLToPath(new URL('./snapshot-baseline.json', import.meta.url));
+
+// The checksum the release build verifies before it embeds the file. It attests that the
+// snapshot a release ships is the one the nightly job produced and nothing that was swapped
+// in between the two — it says nothing about whether the sources themselves were honest,
+// which is what the drift guard is for. Same format sha256sum -c reads, so the release job
+// needs no parsing of its own; the filename in it is the basename, since the two files sit
+// side by side wherever they are checked.
+export function checksumLine(text, filename) {
+    return `${createHash('sha256').update(text).digest('hex')}  ${filename}\n`;
+}
+
+async function main(output, { writeBaseline = false } = {}) {
+    const generatedAt = new Date().toISOString();
     const texts = await fetchAll(SOURCES);
-    const { text, universe, perSource } = buildSnapshot({
-        urls: SOURCES,
-        texts,
-        generatedAt: new Date().toISOString(),
-    });
+
+    // --write-baseline is the deliberate human bump: it records what the sources carry right
+    // now and skips the guard, so it must never be what CI runs.
+    const baseline = writeBaseline ? null : JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
+    const { text, universe, perSource } = buildSnapshot({ urls: SOURCES, texts, generatedAt, baseline });
 
     writeFileSync(output, text);
+    writeFileSync(`${output}.sha256`, checksumLine(text, output.split(/[\\/]/).pop()));
 
     for (const s of perSource) {
         stdout.write(`${String(s.index).padStart(2)} ${String(s.unique).padStart(6)} unique  ${shortUrl(SOURCES[s.index])}\n`);
     }
     stdout.write(`\n${universe.size} unique proxies, ${(Buffer.byteLength(text) / 1024 / 1024).toFixed(2)} MiB -> ${output}\n`);
+
+    if (writeBaseline) {
+        writeFileSync(BASELINE_PATH, JSON.stringify(baselineFrom(SOURCES, perSource, generatedAt), null, 4) + '\n');
+        stdout.write(`baseline rewritten -> ${BASELINE_PATH}\n`);
+    }
 }
 
 // Run only when invoked directly, so the test can import the module without fetching.
 // import.meta.main is Node 24.2+; CI runs Node 22.
 if (argv[1] && fileURLToPath(import.meta.url) === argv[1]) {
     try {
-        await main(argv[2] || DEFAULT_OUTPUT);
+        const args = argv.slice(2);
+        const writeBaseline = args.includes('--write-baseline');
+        await main(args.find(a => !a.startsWith('--')) || DEFAULT_OUTPUT, { writeBaseline });
     } catch (err) {
         stderr.write(`build-snapshot: ${err.message || err}\n`);
         exit(1);
