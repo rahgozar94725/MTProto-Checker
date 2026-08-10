@@ -4,11 +4,13 @@ on:
   push:
     tags: [ 'v*' ]
 
-permissions:
-  contents: write
-
 jobs:
   build:
+    # Scoped per job rather than declared at the workflow level: only the release
+    # job publishes anything, and this one runs a shell with a tag name in it.
+    permissions:
+      contents: read
+
     strategy:
       matrix:
         include:
@@ -58,11 +60,17 @@ jobs:
           ( cd "$RUNNER_TEMP" && sha256sum -c snapshot.txt.sha256 )
           cp "$RUNNER_TEMP/snapshot.txt" public/data/snapshot.txt
 
+      # The tag name reaches the shell through the environment, never through
+      # ${{ }} interpolation: an expression is substituted into the script before
+      # bash parses it, and git check-ref-format permits `$`, backticks, `;` and
+      # `&` in a tag. Interpolated, `v1$(curl … | sh)` is command substitution
+      # running on the runner that builds every published binary.
       - name: Build
         run: |
-          go build -ldflags="-X main.version=${{ github.ref_name }}" \
+          go build -ldflags="-X main.version=${REF_NAME}" \
             -o mtproto-checker-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} .
         env:
+          REF_NAME: ${{ github.ref_name }}
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
@@ -82,6 +90,8 @@ jobs:
   # which version that SHA is.
   release:
     needs: build
+    permissions:
+      contents: write
     uses: rahgozar94725/release-workflows/.github/workflows/release.yml@e17e401b6ffd76ba9ab7fffb59ea9a5ce0954711  # v2.0.0
     with:
       artifact-glob: 'binary-*/*'

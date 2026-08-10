@@ -130,6 +130,68 @@ test('release.yml verifies the snapshot checksum before it embeds the file', () 
     assert.match(text, /snapshot\.txt\.sha256/, 'the checksum file is never fetched');
 });
 
+// The whole fail-closed promise of the nightly job is one command line. `--write-baseline`
+// is a single token that sets `baseline = null` in build-snapshot.mjs, which skips checkDrift
+// entirely *and* rewrites scripts/snapshot-baseline.json from the very run that should have
+// been refused -- so a flooded source both ships and moves the reference it would be measured
+// against next time. Every other gate in this file stays green while it happens.
+test('the nightly job builds the snapshot with the drift guard armed', () => {
+    const text = workflow('snapshot.yml');
+
+    assert.match(text, /^\s+run: node scripts\/build-snapshot\.mjs "\$RUNNER_TEMP\/snapshot\.txt"$/m,
+        'the nightly build command is no longer the plain guarded one');
+    assert.doesNotMatch(text, /--write-baseline/,
+        'regenerating the baseline is a deliberate local act, never what CI does');
+});
+
+// The "100% line and branch" claim in CLAUDE.md and SPEC.md is enforced by exactly two flags
+// in one npm script, run by exactly one step. Drop either end and every suite here still
+// passes while the number goes back to being documentation. Same shape as the gofmt and race
+// steps above, which are guarded for the same reason.
+test('the js job runs the coverage gate, and the gate still carries both thresholds', () => {
+    const js = jobBlock(workflow('test.yml'), 'js');
+    assert.match(js, /^\s+run: npm run test:coverage:ci$/m,
+        'nothing enforces the coverage thresholds any more');
+
+    const pkg = JSON.parse(readFileSync(`${repoRoot}package.json`, 'utf8'));
+    const gate = pkg.scripts['test:coverage:ci'];
+
+    assert.ok(gate, 'package.json no longer defines the coverage gate');
+    assert.match(gate, /--test-coverage-lines=100\b/, 'the line threshold is gone');
+    assert.match(gate, /--test-coverage-branches=100\b/, 'the branch threshold is gone');
+});
+
+// A ${{ }} expression is substituted into a run: script before bash parses it, so anything
+// an outsider can name is shell source rather than an argument. git check-ref-format permits
+// `$`, backticks, `;` and `&` in a tag, which makes `github.ref_name` in a run: block code
+// execution for anyone who can push one -- in release.yml, next to the toolchain that builds
+// every published binary. Passing it through env: is the whole fix; this pins it there.
+test('no workflow interpolates a tag or event name into a shell script', () => {
+    for (const name of ['snapshot.yml', 'release.yml', 'test.yml']) {
+        const text = workflow(name);
+        for (const line of text.split('\n')) {
+            if (!/\$\{\{\s*github\.(ref_name|head_ref|event)\b/.test(line)) continue;
+            assert.match(line, /^\s+[A-Z][A-Z0-9_]*: \$\{\{ github\.[a-z_.]+ \}\}$/,
+                `${name} interpolates attacker-nameable context outside an env: mapping: ${line.trim()}`);
+        }
+    }
+});
+
+// release.yml holds the only contents: write in the repository. Declared at workflow level it
+// is inherited by the build job, which runs a shell and a Go toolchain over a tag name -- the
+// exact pattern snapshot.yml is written to avoid. Scoped to the job that publishes, a future
+// job added here starts with no token rather than with the strongest one.
+test('release.yml scopes contents: write to the publishing job', () => {
+    const text = workflow('release.yml');
+
+    assert.doesNotMatch(text, /^permissions:/m,
+        'a workflow-level permissions block hands the build job a token it never uses');
+    assert.match(jobBlock(text, 'build'), /^\s+permissions:\n\s+contents: read$/m,
+        'the build job publishes nothing and should not be able to');
+    assert.match(jobBlock(text, 'release'), /^\s+permissions:\n\s+contents: write$/m,
+        'the publishing job needs the write it used to inherit');
+});
+
 // A moving ref here would let the workflow repository repoint this project at code it
 // never reviewed, and a release is exactly where that would land.
 test('release.yml pins the publishing workflow by SHA', () => {
