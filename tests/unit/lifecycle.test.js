@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { mountApp } from '../helpers/dom.js';
 import { body, progressFrame, doneFrame } from '../helpers/sse.js';
 import { translations, interpolate } from '../../public/js/i18n.js';
-import { DEFAULT_SOURCES, shortUrl } from '../../public/js/sources.js';
+import { DEFAULT_SOURCES, SNAPSHOT_SOURCE_URL, shortUrl } from '../../public/js/sources.js';
 
 const fa = translations.fa;
 const encoder = new TextEncoder();
@@ -88,15 +88,45 @@ const SNAPSHOT_TEXT = [
     '',
 ].join('\n');
 
-// Routes /data/snapshot.txt to a text response and everything else to the scan stub.
-function respondToSnapshot(snapshot, scan = respondWith('')) {
+// A copy the live fetch must never be allowed to stand in for: same grammar, different link,
+// so which of the two steps answered is readable straight off the textarea.
+const BAKED_LINK = link('203.0.113.50', 443, 'ee6f708192a3b4c5d6e7f8091a2b3c4d');
+const BAKED_TEXT = [
+    `# generated ${SNAPSHOT_GENERATED_AT} by scripts/build-snapshot.mjs`,
+    `# 0 ${shortUrl(DEFAULT_SOURCES[0])}`,
+    `${BAKED_LINK}#seen=1;src=0`,
+    '',
+].join('\n');
+
+// A source only this user has: the snapshot is built from the built-ins, so a user-added list
+// is the one thing the button has to fetch on its own.
+const USER_SOURCE = 'https://example.invalid/list.txt';
+const USER_LINK = link('203.0.113.60', 443, 'ee708192a3b4c5d6e7f8091a2b3c4d5e');
+const STORED_USER_SOURCE = JSON.stringify([{ url: USER_SOURCE, enabled: true }]);
+
+function textResponse(text) {
+    if (text === null) return { ok: false, status: 502, text: async () => '' };
+    return { ok: true, status: 200, text: async () => text };
+}
+
+// The Load-list button's three steps, each routable on its own: the live snapshot and the user
+// sources through POST /fetch-sources, the baked copy off /data/snapshot.txt, and the scan.
+// A step left null answers as a failure.
+function respondToLoad({ live = null, baked = null, userSources = null, scan = respondWith('') } = {}) {
     return async (url, init) => {
-        if (String(url).includes('snapshot.txt')) {
-            if (snapshot === null) return { ok: false, status: 404, text: async () => '' };
-            return { ok: true, status: 200, text: async () => snapshot };
+        const target = String(url);
+        if (target === '/fetch-sources') {
+            const { urls } = JSON.parse(init.body);
+            return textResponse(urls.includes(SNAPSHOT_SOURCE_URL) ? live : userSources);
         }
+        if (target.includes('snapshot.txt')) return textResponse(baked);
         return scan(url, init);
     };
+}
+
+// The ordinary case: the same snapshot answers whichever of the two steps gets there.
+function respondToSnapshot(snapshot, scan = respondWith('')) {
+    return respondToLoad({ live: snapshot, baked: snapshot, scan });
 }
 
 function localizedDate(lang, iso) {
@@ -335,7 +365,7 @@ test('the load-list button fills the input with fragment-free links and shows th
 
         assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), SNAPSHOT_LINKS);
         assert.doesNotMatch(app.document.getElementById('inputProxies').value, /#seen=/);
-        assert.equal(app.recorded.fetches[0].url, '/data/snapshot.txt');
+        assert.equal(app.recorded.fetches[0].url, '/fetch-sources');
 
         // The generation date is on the page without opening anything, in the active locale.
         assert.equal(
@@ -351,6 +381,110 @@ test('the load-list button fills the input with fragment-free links and shows th
             app.document.getElementById('snapshotMeta').textContent,
             interpolate(translations.ru.snapshotDate, { date: localizedDate('ru', SNAPSHOT_GENERATED_AT) })
         );
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('the load-list button asks the server for the nightly snapshot before touching the embed', async () => {
+    const app = await mountApp({ fetch: respondToLoad({ live: SNAPSHOT_TEXT, baked: BAKED_TEXT }) });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), SNAPSHOT_LINKS,
+            'the live snapshot is what fills the textarea, not the baked copy');
+
+        const [first] = app.recorded.fetches;
+        assert.equal(first.url, '/fetch-sources');
+        assert.equal(first.init.method, 'POST');
+        assert.deepEqual(JSON.parse(first.init.body).urls, [SNAPSHOT_SOURCE_URL]);
+        assert.ok(!app.recorded.fetches.some(f => f.url.includes('snapshot.txt')),
+            'the embed is a fallback, not a second request');
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a failed live fetch falls back to the copy baked into the binary', async () => {
+    const app = await mountApp({ fetch: respondToLoad({ live: null, baked: BAKED_TEXT }) });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), [BAKED_LINK]);
+        assert.equal(toastText(app), interpolate(fa.toastSnapshotLoaded, { n: 1 }));
+        assert.doesNotMatch(app.document.getElementById('toast').className, /error/);
+
+        // A network the live fetch cannot cross is the case this feature exists for, so the
+        // fallback is a log line and not an error that throws the drawer open.
+        assert.equal(app.document.querySelectorAll('#console .error-log').length, 0);
+        assert.equal(app.document.getElementById('consoleDrawer').open, false);
+        assert.match(app.document.getElementById('console').textContent, /LIVE SNAPSHOT/);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a user-added source is fetched after the snapshot and deduped against it', async () => {
+    const app = await mountApp({
+        fetch: respondToLoad({
+            live: SNAPSHOT_TEXT,
+            // The second line is a link the snapshot already published: two lists carrying the
+            // same proxy must not put it in the textarea twice.
+            userSources: [USER_LINK, SNAPSHOT_LINKS[0]].join('\n'),
+        }),
+        storage: { sources: STORED_USER_SOURCE },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'),
+            [...SNAPSHOT_LINKS, USER_LINK]);
+
+        // Two requests, in the documented order, and the built-ins are not among them: they are
+        // what the nightly snapshot is built from.
+        assert.deepEqual(
+            app.recorded.fetches.filter(f => f.url === '/fetch-sources').map(f => JSON.parse(f.init.body).urls),
+            [[SNAPSHOT_SOURCE_URL], [USER_SOURCE]]
+        );
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a disabled user source is not fetched at all', async () => {
+    const app = await mountApp({
+        fetch: respondToLoad({ live: SNAPSHOT_TEXT, userSources: USER_LINK }),
+        storage: { sources: JSON.stringify([{ url: USER_SOURCE, enabled: false }]) },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), SNAPSHOT_LINKS);
+        assert.equal(app.recorded.fetches.filter(f => f.url === '/fetch-sources').length, 1);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a user source that fails does not cost the snapshot that succeeded', async () => {
+    const app = await mountApp({
+        fetch: respondToLoad({ live: SNAPSHOT_TEXT, userSources: null }),
+        storage: { sources: STORED_USER_SOURCE },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), SNAPSHOT_LINKS);
+        assert.equal(toastText(app), interpolate(fa.toastSnapshotLoaded, { n: SNAPSHOT_LINKS.length }));
+
+        const errors = [...app.document.querySelectorAll('#console .error-log')];
+        assert.equal(errors.length, 1);
+        assert.match(errors[0].textContent, /USER SOURCES/);
     } finally {
         app.cleanup();
     }

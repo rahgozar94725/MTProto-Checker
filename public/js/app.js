@@ -19,6 +19,7 @@ import {
     serializeSources,
     setEnabled,
     shortUrl,
+    SNAPSHOT_SOURCE_URL,
 } from './sources.js';
 
 // All mutable scan state lives here; nothing below declares its own.
@@ -534,8 +535,13 @@ function syncSoundUI() {
 }
 
 // The list baked into the binary by //go:embed. Fetched, never read from disk, so this
-// works the same whether the page is served by `go run .` or by a released binary.
+// works the same whether the page is served by `go run .` or by a released binary. It is the
+// fallback now, not the first choice: the copy on the `snapshot` branch is rebuilt nightly and
+// the baked one is as old as the release.
 const SNAPSHOT_URL = '/data/snapshot.txt';
+
+// Every list the server fetches on the page's behalf goes through here.
+const FETCH_SOURCES_URL = '/fetch-sources';
 
 // The ISO timestamp off the snapshot header, '' until a load succeeds. Kept here rather
 // than in the DOM so a language change can re-render the date in the new locale.
@@ -556,34 +562,99 @@ function renderSnapshotMeta() {
     el.textContent = interpolate(translations[currentLang].snapshotDate, { date: shown });
 }
 
-async function loadSnapshot() {
-    const t = translations[currentLang];
+// The server fetches on the page's behalf: it can go through a SOCKS5 proxy, and it is not
+// bound by CORS. Returns the concatenated text of every source that answered -- a source the
+// server could not reach contributes nothing and fails nothing, so an empty body is a real
+// answer and not an error.
+async function fetchSources(urls) {
+    const response = await fetch(FETCH_SOURCES_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.text();
+}
+
+// Steps 1 and 2 of the button: the nightly snapshot, live when the server can reach it and off
+// the embed when it cannot. → the parsed snapshot, or null when neither answered with links.
+async function loadSnapshotFile() {
+    try {
+        // parseSnapshot is total, so an unusable body arrives as zero links rather than a
+        // throw -- which is still a failed step from the user's point of view.
+        const snapshot = parseSnapshot(await fetchSources([SNAPSHOT_SOURCE_URL]));
+        if (snapshot.links.length === 0) throw new Error('no links in the live snapshot');
+        log(`Loaded ${snapshot.links.length} links from the nightly list.`);
+        return snapshot;
+    } catch (err) {
+        // Logged plainly, not as an error: a network the server cannot cross is the case this
+        // whole feature exists for, and the baked copy is about to cover it.
+        log(`LIVE SNAPSHOT: ${err.message} — falling back to the built-in copy.`);
+    }
+
     try {
         const response = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        // parseSnapshot is total, so an unusable file arrives as zero links rather than a
-        // throw -- which is still a failed load from the user's point of view.
-        const { generatedAt, sources: header, links, attribution } = parseSnapshot(await response.text());
-        if (links.length === 0) throw new Error('no links in snapshot');
-
-        document.getElementById('inputProxies').value = links.join('\n');
-        // Replaced rather than merged: the file just fetched is the whole truth about
-        // which sources published what. A failed load keeps the previous map instead.
-        state.snapshotAttribution = attribution;
-        // The header is what joins a `src=` id to a source url, so scoring and scan
-        // ordering are both dead until a snapshot has been loaded at least once.
-        snapshotSourceUrls = header;
-        snapshotGeneratedAt = generatedAt;
-        renderSnapshotMeta();
-        log(`Loaded ${links.length} links from the built-in list.`);
-        showToast(interpolate(t.toastSnapshotLoaded, { n: links.length }));
+        const snapshot = parseSnapshot(await response.text());
+        if (snapshot.links.length === 0) throw new Error('no links in snapshot');
+        log(`Loaded ${snapshot.links.length} links from the built-in list.`);
+        return snapshot;
     } catch (err) {
+        log(`SNAPSHOT ERROR: ${err.message}`, true);
+        return null;
+    }
+}
+
+// Step 3: the sources the user added themselves. The built-ins are what the nightly snapshot is
+// built from, so fetching them here would only duplicate it -- a user-added list is the one
+// thing no snapshot can carry. → their links as text, '' when there are none or none answered.
+async function loadUserSources() {
+    const urls = sources.filter(source => source.addedByUser && source.enabled).map(source => source.url);
+    if (urls.length === 0) return '';
+
+    try {
+        const { proxies } = parseProxyList(await fetchSources(urls));
+        log(`Loaded ${proxies.length} links from ${urls.length} of your own sources.`);
+        return proxies.map(p => p.original).join('\n');
+    } catch (err) {
+        // An error, unlike the live-snapshot step: nothing else covers a user's own list, so
+        // the drawer opening is the point.
+        log(`USER SOURCES: ${err.message}`, true);
+        return '';
+    }
+}
+
+async function loadSnapshot() {
+    const t = translations[currentLang];
+
+    // Sequential, in the documented order, so the activity log reads the way the feature is
+    // described. Each step is total: a failure is logged and the next one still runs.
+    const snapshot = await loadSnapshotFile();
+    const userText = await loadUserSources();
+
+    if (snapshot) {
+        // Replaced rather than merged: the file just fetched is the whole truth about which
+        // sources published what. A failed load keeps the previous map instead.
+        state.snapshotAttribution = snapshot.attribution;
+        // The header is what joins a `src=` id to a source url, so scoring and scan ordering
+        // are both dead until a snapshot has been loaded at least once.
+        snapshotSourceUrls = snapshot.sources;
+        snapshotGeneratedAt = snapshot.generatedAt;
+        renderSnapshotMeta();
+    }
+
+    // Deduped as one list rather than concatenated: two lists carrying the same proxy is the
+    // ordinary case, and the scan would otherwise be posted the same link twice.
+    const { proxies } = parseProxyList([snapshot ? snapshot.links.join('\n') : '', userText].join('\n'));
+    if (proxies.length === 0) {
         // The textarea is deliberately left alone: a failed load must not cost the user
         // whatever they had already pasted.
-        log(`SNAPSHOT ERROR: ${err.message}`, true);
         showToast(t.toastSnapshotFailed, true);
+        return;
     }
+
+    document.getElementById('inputProxies').value = proxies.map(p => p.original).join('\n');
+    showToast(interpolate(t.toastSnapshotLoaded, { n: proxies.length }));
 }
 
 // The source list, and the two things it decides: what the rows say, and what order the next

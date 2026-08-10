@@ -165,8 +165,13 @@ test.describe('every migrated control still fires', () => {
         // Nothing is shown before a load: the date line collapses to nothing.
         await expect(page.locator('#snapshotMeta')).toHaveText('');
 
-        // No route stub — /data/snapshot.txt comes off the //go:embed tree, which is the
-        // whole point of the button. The count is left to the file; the shape is not.
+        // The live step is refused, which is what makes this the embed's test — and keeps the
+        // server from dialling raw.githubusercontent.com during an offline CI run.
+        // /data/snapshot.txt itself is not stubbed: it comes off the //go:embed tree, which is
+        // the whole point of the button. The count is left to the file; the shape is not.
+        // 200 with an empty body is what the real handler answers when no source could be
+        // reached: it skips a failed source rather than failing the request.
+        await page.route('**/fetch-sources', (route) => route.fulfill({ status: 200, body: '' }));
         await page.locator('#loadListBtn').click();
         await expect(page.locator('#inputProxies')).not.toHaveValue('');
 
