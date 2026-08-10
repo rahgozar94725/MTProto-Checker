@@ -25,30 +25,13 @@ import { argv, exit, stderr, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { parseLink, proxyKey } from '../public/js/parse.js';
+import { DEFAULT_SOURCES, RAW_PREFIX } from '../public/js/sources.js';
 
-const RAW_PREFIX = 'https://raw.githubusercontent.com/';
-
-// Source ids are positional: index 3 here is `src=3` in every line of the snapshot, so
-// appending is safe and reordering is not. Phase 0 measured this exact order.
-export const SOURCES = [
-    `${RAW_PREFIX}iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt`,
-    `${RAW_PREFIX}Argh94/Proxy-List/main/MTProto.txt`,
-    `${RAW_PREFIX}Kira00011/MTProto/main/all_proxies.txt`,
-    `${RAW_PREFIX}SoliSpirit/mtproto/master/all_proxies.txt`,
-    `${RAW_PREFIX}Therealwh/MTPproxyLIST/refs/heads/main/verified/proxy_all_verified.txt`,
-    `${RAW_PREFIX}kort0881/telegram-proxy-collector/main/proxy_all.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no1.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no2.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no3.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no4.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no5.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no6.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no7.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no8.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no9.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no10.txt`,
-    `${RAW_PREFIX}FLAT447/v2ray-lists/refs/heads/main/blacklist.txt`,
-];
+// Source ids are positional: index 3 there is `src=3` in every line of the snapshot, so
+// appending is safe and reordering is not. Phase 0 measured this exact order. The list lives
+// in public/js/sources.js because the UI's source model needs the same 17 defaults, and two
+// copies that drifted apart would misattribute every line of the snapshot.
+export const SOURCES = DEFAULT_SOURCES;
 
 const FETCH_TIMEOUT_MS = 30_000;
 const DEFAULT_OUTPUT = 'snapshot.txt';
