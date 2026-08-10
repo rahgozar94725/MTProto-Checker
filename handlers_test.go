@@ -375,6 +375,27 @@ func TestEndpointsAllowEveryBoundHostSpelling(t *testing.T) {
 	}
 }
 
+// The port in Host is the port the browser was told to connect to, and that is
+// not the bound port whenever anything forwards: `ssh -L 8080:127.0.0.1:3000`
+// on a remote box is the obvious deployment for a censorship-circumvention
+// tool, and PORT=80 makes the browser omit the port from Host entirely. GETs
+// are unguarded, so pinning the port left the page loading normally with every
+// control dead and nothing in either log naming the cause.
+func TestEndpointsAllowAHostWhosePortIsNotTheBoundOne(t *testing.T) {
+	defer withAllowedHosts(t, "127.0.0.1:3000")()
+
+	for _, host := range []string{"127.0.0.1", "localhost", "[::1]", "localhost:8080", "127.0.0.1:80"} {
+		rec := postFromHost(t, "/fetch-sources", host, map[string]string{
+			"Sec-Fetch-Site": "same-origin",
+			"Origin":         "http://" + host,
+		})
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("POST from Host %q = %d, want 400 — the guard rejected its own page", host, rec.Code)
+		}
+	}
+}
+
 // A non-loopback bind has no name to pin, so the allowlist is empty and the
 // Host check is off. Pinned in this direction because the alternative — an
 // empty map read as "allow nothing" — would 403 every request on a

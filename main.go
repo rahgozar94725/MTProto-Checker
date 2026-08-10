@@ -533,8 +533,17 @@ var allowedHosts map[string]struct{}
 // has a browser opened at it -- and without its own entry every POST from that
 // page 403s, with the map non-empty so the WARNING line stays silent as well.
 // Lowercased because sameOriginOnly lowercases the Host it compares.
+//
+// The entries carry no port, and the bound one is deliberately not pinned. The
+// port in Host is the one the browser was told to connect to, which is not the
+// bound one behind `ssh -L 8080:127.0.0.1:3000`, `docker run -p` or any other
+// forward, and is absent entirely when the bound port is the scheme default
+// (PORT=80). Pinning it refused the real page in all three cases while buying
+// nothing: what the check has to refuse is a rebound *name*, and evil.test is
+// not a loopback name at any port. The port is still load-bearing in the Origin
+// arm below, which compares against the whole of r.Host.
 func hostAllowlist(addr string) map[string]struct{} {
-	host, port, err := net.SplitHostPort(addr)
+	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil
 	}
@@ -542,11 +551,23 @@ func hostAllowlist(addr string) map[string]struct{} {
 		return nil
 	}
 	allowed := make(map[string]struct{}, 4)
-	allowed[strings.ToLower(net.JoinHostPort(host, port))] = struct{}{}
-	for _, h := range []string{"127.0.0.1", "localhost", "[::1]"} {
-		allowed[h+":"+port] = struct{}{}
+	allowed[strings.ToLower(host)] = struct{}{}
+	for _, h := range []string{"127.0.0.1", "localhost", "::1"} {
+		allowed[h] = struct{}{}
 	}
 	return allowed
+}
+
+// hostWithoutPort reduces an HTTP Host to the name hostAllowlist holds: the
+// port dropped when there is one, the brackets dropped from an IPv6 literal
+// whether or not a port followed it. SplitHostPort is the only thing that can
+// tell `[::1]:3000` from `::1`, and it fails on both bracketless and portless
+// spellings, so its error is the signal to trim rather than a problem.
+func hostWithoutPort(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 }
 
 // shouldOpenBrowser reports whether startup should try to launch a browser:
@@ -760,7 +781,7 @@ func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
 func sameOriginOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if len(allowedHosts) > 0 {
-			if _, ok := allowedHosts[strings.ToLower(r.Host)]; !ok {
+			if _, ok := allowedHosts[strings.ToLower(hostWithoutPort(r.Host))]; !ok {
 				jsonResponse(w, http.StatusForbidden, map[string]string{"error": "unexpected Host"})
 				return
 			}
