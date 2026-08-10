@@ -378,3 +378,39 @@ func BenchmarkBatchPipeline(b *testing.B) {
 		b.Logf("TCP phase: %v", time.Since(tcpStart))
 	}
 }
+
+// hostAllowlist is what stops the Origin comparison in sameOriginOnly from
+// being satisfiable by an attacker: that check reads r.Host, which is whatever
+// the browser was told to ask for, so a rebound name makes both arms agree.
+// The three loopback spellings are the ones a browser can legitimately carry
+// for a server bound to loopback; a non-loopback bind has no fixed name to
+// pin, which is why it yields nil and turns the check off.
+func TestHostAllowlist(t *testing.T) {
+	tests := []struct {
+		addr string
+		want []string
+	}{
+		{"127.0.0.1:3000", []string{"127.0.0.1:3000", "localhost:3000", "[::1]:3000"}},
+		{"localhost:8080", []string{"127.0.0.1:8080", "localhost:8080", "[::1]:8080"}},
+		{"[::1]:3000", []string{"127.0.0.1:3000", "localhost:3000", "[::1]:3000"}},
+		{"0.0.0.0:3000", nil},
+		{"192.168.1.5:3000", nil},
+		{"[::]:3000", nil},
+		{"garbage", nil},
+	}
+
+	for _, tt := range tests {
+		got := hostAllowlist(tt.addr)
+
+		if len(got) != len(tt.want) {
+			t.Errorf("hostAllowlist(%q) has %d entries, want %d (%v)",
+				tt.addr, len(got), len(tt.want), got)
+			continue
+		}
+		for _, host := range tt.want {
+			if _, ok := got[host]; !ok {
+				t.Errorf("hostAllowlist(%q) is missing %q (got %v)", tt.addr, host, got)
+			}
+		}
+	}
+}
