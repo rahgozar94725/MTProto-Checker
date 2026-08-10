@@ -411,6 +411,40 @@ test('a snapshot-fed scan exports and copies with no #seen= anywhere', async () 
     }
 });
 
+test('a snapshot-fed scan tags its results with their sources and leaves a pasted one bare', async () => {
+    const PASTED = link('203.0.113.30', 443, 'ee3c4d5e6f708192a3b4c5d6e7f8091a');
+    const stream = body([
+        progress({ server: '192.0.2.10', secret: SNAPSHOT_SECRETS[0], ok: true, ping: 90, completed: 1, total: 3, working: 1 }),
+        progress({ server: '198.51.100.20', port: 8443, secret: SNAPSHOT_SECRETS[1], ok: true, ping: 140, completed: 2, total: 3, working: 2 }),
+        progress({ server: '203.0.113.30', secret: 'ee3c4d5e6f708192a3b4c5d6e7f8091a', ok: true, ping: 200, completed: 3, total: 3, working: 3 }),
+        doneFrame({ completed: 3 }),
+    ]);
+    const app = await mountApp({ fetch: respondToSnapshot(SNAPSHOT_TEXT, respondWith(stream)) });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        // A link the snapshot never mentioned, appended to what the button loaded.
+        app.document.getElementById('inputProxies').value += `\n${PASTED}`;
+
+        click(app, 'startBtn');
+        await waitFor(() => isIdle(app), 'the scan to finish');
+        app.flushFrames();
+
+        // Rows are sorted by ping: the two snapshot links, then the pasted one.
+        assert.deepEqual(rows(app).map(tr => tr.dataset.srcs), ['0', '0,1', undefined]);
+
+        // Attribution is display state only -- Decision 6 keeps it out of every artifact.
+        click(app, 'exportJsonBtn');
+        const json = JSON.parse(await app.recorded.objectURLs[0].blob.text());
+        assert.deepEqual(json.map(p => Object.keys(p).sort()), [
+            ['link', 'ping'], ['link', 'ping'], ['link', 'ping'],
+        ]);
+    } finally {
+        app.cleanup();
+    }
+});
+
 test('five results in one tick queue exactly one render', async () => {
     const requests = [];
     const app = await mountApp({ fetch: respondManually(requests) });

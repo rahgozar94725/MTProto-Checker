@@ -82,6 +82,20 @@ test('every row copy button carries its own array index', async () => {
     }
 });
 
+test('a row carries data-srcs only when the proxy has attribution', async () => {
+    const app = await mountApp();
+    try {
+        const attributed = { ...proxy('192.0.2.1', 443, 10), srcs: [0, 3, 11] };
+        renderResultsTable(app.document, [attributed, proxy('192.0.2.2', 443, 20)], 'copy');
+
+        const rows = [...app.document.querySelectorAll('#resultsBody tr')];
+        assert.equal(rows[0].dataset.srcs, '0,3,11');
+        assert.equal(rows[1].dataset.srcs, undefined, 'a pasted proxy gets no attribution attribute');
+    } finally {
+        app.cleanup();
+    }
+});
+
 test('the ping badge class comes from pingClass', async () => {
     const app = await mountApp();
     try {

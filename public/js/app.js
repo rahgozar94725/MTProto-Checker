@@ -307,7 +307,13 @@ async function runCheckStream(proxies, linkMap) {
 
                     if (data.ok) {
                         const orig = linkMap.get(key) || `tg://proxy?server=${data.server}&port=${data.port}&secret=${data.secret}`;
-                        state.workingProxies.push({ link: orig, ping: data.ping, server: data.server, port: data.port });
+                        const found = { link: orig, ping: data.ping, server: data.server, port: data.port };
+                        // srcs is present only for a link the snapshot published; a pasted
+                        // proxy has no source to credit, and Decision 6 keeps the field out
+                        // of every export regardless.
+                        const meta = state.snapshotAttribution.get(key);
+                        if (meta) found.srcs = meta.srcs;
+                        state.workingProxies.push(found);
                         log(`SUCCESS: ${data.server} (${data.ping}ms)`, 'ok');
                         updateOutput();
                     }
@@ -539,10 +545,13 @@ async function loadSnapshot() {
 
         // parseSnapshot is total, so an unusable file arrives as zero links rather than a
         // throw -- which is still a failed load from the user's point of view.
-        const { generatedAt, links } = parseSnapshot(await response.text());
+        const { generatedAt, links, attribution } = parseSnapshot(await response.text());
         if (links.length === 0) throw new Error('no links in snapshot');
 
         document.getElementById('inputProxies').value = links.join('\n');
+        // Replaced rather than merged: the file just fetched is the whole truth about
+        // which sources published what. A failed load keeps the previous map instead.
+        state.snapshotAttribution = attribution;
         snapshotGeneratedAt = generatedAt;
         renderSnapshotMeta();
         log(`Loaded ${links.length} links from the built-in list.`);

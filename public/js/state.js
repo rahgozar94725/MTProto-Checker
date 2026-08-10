@@ -20,6 +20,10 @@ export function createScanState() {
         allProxies: [],
         // "server:port:secret" -> the original pasted link, which carries the secret.
         globalLinkMap: new Map(),
+        // "server:port:secret" -> {seen, srcs} off the last loaded snapshot. Keyed by
+        // identity rather than by paste, so it outlives one scan: a proxy the snapshot
+        // published keeps its sources whether the user reloads the list or edits around it.
+        snapshotAttribution: new Map(),
         // Last progress numbers, so a re-render does not need a new event.
         lastChecked: 0,
         lastTotal: 0,

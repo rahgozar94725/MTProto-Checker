@@ -31,6 +31,9 @@ export function renderResultsTable(doc, proxies, rowCopyLabel) {
         btn.textContent = rowCopyLabel;
 
         const tr = doc.createElement('tr');
+        // Attribution rides the row as data, not as text: a pasted proxy has none, and
+        // the ids are positions in the snapshot's source table, not anything to display.
+        if (p.srcs) tr.dataset.srcs = p.srcs.join(',');
         tr.append(
             resultCell(doc, 'rank', i + 1),
             resultCell(doc, 'host', p.server),
