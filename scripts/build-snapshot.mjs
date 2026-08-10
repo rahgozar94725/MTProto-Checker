@@ -25,7 +25,7 @@ import { argv, exit, stderr, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { parseLink, proxyKey } from '../public/js/parse.js';
-import { DEFAULT_SOURCES, RAW_PREFIX } from '../public/js/sources.js';
+import { DEFAULT_SOURCES, shortUrl } from '../public/js/sources.js';
 
 // Source ids are positional: index 3 there is `src=3` in every line of the snapshot, so
 // appending is safe and reordering is not. Phase 0 measured this exact order. The list lives
@@ -36,9 +36,9 @@ export const SOURCES = DEFAULT_SOURCES;
 const FETCH_TIMEOUT_MS = 30_000;
 const DEFAULT_OUTPUT = 'snapshot.txt';
 
-export function shortUrl(url) {
-    return url.startsWith(RAW_PREFIX) ? url.slice(RAW_PREFIX.length) : url;
-}
+// Re-exported rather than defined here: the UI's scoring joins a snapshot header back onto the
+// source model, so both sides have to shorten a URL the same way.
+export { shortUrl };
 
 // Everything from the first `#` is a source-side comment, not part of the link.
 function stripFragment(line) {

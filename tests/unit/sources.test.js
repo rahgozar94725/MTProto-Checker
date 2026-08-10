@@ -13,13 +13,20 @@ import {
     addSource,
     defaultSources,
     parseSources,
+    recordScan,
     removeSource,
     serializeSources,
     setEnabled,
+    shortUrl,
 } from '../../public/js/sources.js';
 import { SOURCES } from '../../scripts/build-snapshot.mjs';
 
 const USER_URL = 'https://example.invalid/my-list.txt';
+
+// A snapshot header declares its sources short — `# 0 iwh3n/tg-proxy/…` — so every scoring
+// test feeds recordScan exactly what parseSnapshot() hands back, short urls and all.
+const HEADER = [shortUrl(DEFAULT_SOURCES[0]), shortUrl(DEFAULT_SOURCES[1]), USER_URL];
+const scoreOf = (list, url) => list.find(s => s.url === url).score;
 
 test('DEFAULT_SOURCES is the same list build-snapshot.mjs builds from', () => {
     assert.deepEqual(SOURCES, DEFAULT_SOURCES);
@@ -170,4 +177,138 @@ test('restoring the defaults drops user-added sources and re-enables the built-i
     // Restore is defaultSources() itself: the action is wiring, not arithmetic. What matters
     // is that what it produces survives a write/read cycle unchanged.
     assert.deepEqual(parseSources(serializeSources(defaultSources())), defaultSources());
+});
+
+// --- scoring ---------------------------------------------------------------------------
+
+test('recordScan credits every source of a working proxy, not just the first', () => {
+    // One link, published by both built-ins. A "first source wins" implementation scores
+    // source 1 at 0 working and passes every other test in this file.
+    const list = recordScan(defaultSources(), {
+        sourceUrls: HEADER,
+        provided: [[0, 1]],
+        working: [[0, 1]],
+        scannedAt: '2026-08-10T00:00:00.000Z',
+    });
+
+    assert.deepEqual(scoreOf(list, DEFAULT_SOURCES[0]), {
+        linksProvided: 1, linksWorking: 1, lastScan: '2026-08-10T00:00:00.000Z',
+    });
+    assert.deepEqual(scoreOf(list, DEFAULT_SOURCES[1]), {
+        linksProvided: 1, linksWorking: 1, lastScan: '2026-08-10T00:00:00.000Z',
+    });
+});
+
+test('recordScan counts a link once per source when a fragment repeats an id', () => {
+    const list = recordScan(defaultSources(), {
+        sourceUrls: HEADER,
+        provided: [[0, 0]],
+        working: [[0, 0]],
+    });
+
+    assert.deepEqual(scoreOf(list, DEFAULT_SOURCES[0]), {
+        linksProvided: 1, linksWorking: 1, lastScan: '',
+    });
+});
+
+test('recordScan scores working links as a subset of the links provided', () => {
+    const list = recordScan(defaultSources(), {
+        sourceUrls: HEADER,
+        provided: [[0], [0], [0, 1], [1]],
+        working: [[0, 1]],
+    });
+
+    assert.equal(scoreOf(list, DEFAULT_SOURCES[0]).linksProvided, 3);
+    assert.equal(scoreOf(list, DEFAULT_SOURCES[0]).linksWorking, 1);
+    assert.equal(scoreOf(list, DEFAULT_SOURCES[1]).linksProvided, 2);
+    assert.equal(scoreOf(list, DEFAULT_SOURCES[1]).linksWorking, 1);
+});
+
+test('recordScan scores a user-added source through the header it was declared in', () => {
+    const list = recordScan(addSource(defaultSources(), USER_URL), {
+        sourceUrls: HEADER,
+        provided: [[2]],
+        working: [],
+    });
+
+    assert.deepEqual(scoreOf(list, USER_URL), { linksProvided: 1, linksWorking: 0, lastScan: '' });
+});
+
+test('recordScan neither credits nor penalizes a source that provided nothing', () => {
+    const list = recordScan(defaultSources(), { sourceUrls: HEADER, provided: [[0]] });
+
+    assert.equal('score' in list.find(s => s.url === DEFAULT_SOURCES[1]), false);
+});
+
+test('recordScan leaves an untouched source score exactly as it was', () => {
+    const scanned = recordScan(defaultSources(), { sourceUrls: HEADER, provided: [[1]], working: [[1]] });
+    const again = recordScan(scanned, { sourceUrls: HEADER, provided: [[0]] });
+
+    assert.deepEqual(scoreOf(again, DEFAULT_SOURCES[1]), scoreOf(scanned, DEFAULT_SOURCES[1]));
+});
+
+test('recordScan accumulates across scans and moves lastScan forward', () => {
+    const first = recordScan(defaultSources(), {
+        sourceUrls: HEADER, provided: [[0], [0]], working: [[0]], scannedAt: 'first',
+    });
+    const second = recordScan(first, {
+        sourceUrls: HEADER, provided: [[0], [0], [0]], working: [[0], [0]], scannedAt: 'second',
+    });
+
+    assert.deepEqual(scoreOf(second, DEFAULT_SOURCES[0]), {
+        linksProvided: 5, linksWorking: 3, lastScan: 'second',
+    });
+});
+
+test('an accumulated score survives a write/read cycle', () => {
+    const list = recordScan(addSource(defaultSources(), USER_URL), {
+        sourceUrls: HEADER, provided: [[0], [2]], working: [[2]], scannedAt: 'first',
+    });
+
+    assert.deepEqual(parseSources(serializeSources(list)), list);
+});
+
+test('recordScan ignores a src id the header never declared', () => {
+    const list = recordScan(defaultSources(), { sourceUrls: HEADER, provided: [[9]], working: [[9]] });
+
+    assert.deepEqual(list, defaultSources());
+});
+
+test('recordScan ignores a link whose srcs are not an array', () => {
+    const list = recordScan(defaultSources(), { sourceUrls: HEADER, provided: [null, [0]] });
+
+    assert.equal(scoreOf(list, DEFAULT_SOURCES[0]).linksProvided, 1);
+});
+
+test('recordScan with no scan at all changes nothing', () => {
+    assert.deepEqual(recordScan(defaultSources()), defaultSources());
+});
+
+test('recordScan does not mutate the list it was given', () => {
+    const list = defaultSources();
+    recordScan(list, { sourceUrls: HEADER, provided: [[0]], working: [[0]] });
+
+    assert.equal('score' in list[0], false);
+});
+
+for (const [name, score] of [
+    ['is not an object', '"7"'],
+    ['is null', 'null'],
+    ['counts links with a non-number', '{"linksProvided":"3","linksWorking":1,"lastScan":""}'],
+    ['counts working with a non-number', '{"linksProvided":3,"linksWorking":null,"lastScan":""}'],
+    ['counts a NaN', '{"linksProvided":3,"linksWorking":1e999,"lastScan":""}'],
+    ['counts negative links', '{"linksProvided":-3,"linksWorking":1,"lastScan":""}'],
+    ['counts negative working links', '{"linksProvided":3,"linksWorking":-1,"lastScan":""}'],
+    ['dates the scan with a non-string', '{"linksProvided":3,"linksWorking":1,"lastScan":7}'],
+]) {
+    test(`parseSources drops a stored score that ${name}`, () => {
+        const stored = `[{"url":${JSON.stringify(DEFAULT_SOURCES[0])},"enabled":true,"score":${score}}]`;
+
+        assert.deepEqual(parseSources(stored), defaultSources());
+    });
+}
+
+test('shortUrl drops the raw.githubusercontent.com prefix and leaves anything else alone', () => {
+    assert.equal(shortUrl(DEFAULT_SOURCES[0]), 'iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt');
+    assert.equal(shortUrl(USER_URL), USER_URL);
 });

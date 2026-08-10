@@ -3,9 +3,9 @@
 // contract parse.js holds: no DOM, no fetch, no module-level mutable state. app.js owns the
 // wiring and the storage keys; nothing here reads localStorage itself.
 //
-// A source is `{ url, enabled, addedByUser }` and the model is keyed by **url** everywhere.
-// Task 9 hangs per-source scores off these entries and the nightly rebuild is free to append
-// or reorder sources, so an index-keyed model would silently repoint a score.
+// A source is `{ url, enabled, addedByUser }`, plus `{ score }` once a scan has credited it,
+// and the model is keyed by **url** everywhere. The nightly rebuild is free to append or
+// reorder sources, so an index-keyed model would silently repoint a score.
 //
 // scripts/build-snapshot.mjs imports DEFAULT_SOURCES from here rather than keeping its own
 // copy: `src=` ids in the snapshot are positions in this array, so two lists that drifted
@@ -39,8 +39,16 @@ export const DEFAULT_SOURCES = [
     `${RAW_PREFIX}FLAT447/v2ray-lists/refs/heads/main/blacklist.txt`,
 ];
 
+// How a snapshot header names a source: `# 0 iwh3n/tg-proxy/…`. It lives here rather than in
+// scripts/build-snapshot.mjs (which imports it) because recordScan joins a header back onto
+// this model and both sides have to shorten a URL the same way.
+export function shortUrl(url) {
+    return url.startsWith(RAW_PREFIX) ? url.slice(RAW_PREFIX.length) : url;
+}
+
 // The restore-defaults action, and the fallback every unusable stored value lands on. A
 // fresh array of fresh entries each call, so a caller mutating one cannot poison the next.
+// Scores go with it: restoring the defaults is a reset, not a re-enable.
 export function defaultSources() {
     return DEFAULT_SOURCES.map(url => ({ url, enabled: true, addedByUser: false }));
 }
@@ -66,18 +74,41 @@ export function parseSources(stored) {
     for (const entry of entries) {
         if (!entry || typeof entry.url !== 'string') continue;
         if (seen.has(entry.url)) continue;
-        seen.set(entry.url, entry.enabled !== false);
+        seen.set(entry.url, { enabled: entry.enabled !== false, score: readScore(entry.score) });
     }
 
-    const builtIn = defaultSources().map(source => ({
-        ...source,
-        enabled: seen.has(source.url) ? seen.get(source.url) : true,
-    }));
+    const builtIn = defaultSources().map(source => withStored(source, seen.get(source.url)));
     const added = [...seen]
         .filter(([url]) => !DEFAULT_SOURCES.includes(url))
-        .map(([url, enabled]) => ({ url, enabled, addedByUser: true }));
+        .map(([url, storedEntry]) =>
+            withStored({ url, enabled: true, addedByUser: true }, storedEntry));
 
     return [...builtIn, ...added];
+}
+
+// A stored score is as foreign as the rest of the value, and it is arithmetic the UI divides
+// by — so anything that is not a pair of finite non-negative counts and a string date is
+// dropped, leaving the source unscored rather than displaying NaN or throwing.
+function readScore(value) {
+    if (!value || typeof value !== 'object') return null;
+
+    const { linksProvided, linksWorking, lastScan } = value;
+    if (!Number.isFinite(linksProvided) || !Number.isFinite(linksWorking)) return null;
+    if (linksProvided < 0 || linksWorking < 0) return null;
+    if (typeof lastScan !== 'string') return null;
+
+    return { linksProvided, linksWorking, lastScan };
+}
+
+// `score` stays absent until a scan credits the source, so an untouched entry is deep-equal to
+// the default it came from.
+function withStored(source, storedEntry) {
+    if (!storedEntry) return source;
+
+    const merged = { ...source, enabled: storedEntry.enabled };
+    if (storedEntry.score) merged.score = storedEntry.score;
+
+    return merged;
 }
 
 export function setEnabled(sources, url, enabled) {
@@ -94,7 +125,61 @@ export function addSource(sources, url) {
 }
 
 // Built-ins are not removable — disabling one is how it stops being scanned, which keeps its
-// Task 9 score attached to a row the user can turn back on.
+// score attached to a row the user can turn back on.
 export function removeSource(sources, url) {
     return sources.filter(source => source.url !== url || !source.addedByUser);
+}
+
+// → the list with `{ linksProvided, linksWorking, lastScan }` added to every source that
+// published at least one scanned link, accumulating over whatever score it already carried.
+//
+// `sourceUrls` is a snapshot header (index → url, short or full) and `provided`/`working` are
+// the `srcs` id arrays parseSnapshot() attached to the scanned and the working links. Every
+// source of a working proxy is credited, not just the first: a proxy that five lists carry
+// says something about all five, and crediting only `srcs[0]` would make the score a function
+// of DEFAULT_SOURCES order rather than of quality.
+//
+// A source that published nothing this scan is returned untouched — not credited, and not
+// penalized either, since a disabled or unreachable list saying nothing is not evidence
+// against it.
+export function recordScan(sources, { sourceUrls = [], provided = [], working = [], scannedAt = '' } = {}) {
+    const providedCounts = tally(provided, sourceUrls);
+    const workingCounts = tally(working, sourceUrls);
+
+    return sources.map(source => {
+        const key = shortUrl(source.url);
+        const links = providedCounts.get(key) || 0;
+        if (links === 0) return source;
+
+        const score = source.score || { linksProvided: 0, linksWorking: 0 };
+
+        return {
+            ...source,
+            score: {
+                linksProvided: score.linksProvided + links,
+                linksWorking: score.linksWorking + (workingCounts.get(key) || 0),
+                lastScan: scannedAt,
+            },
+        };
+    });
+}
+
+// One tally entry per (link, source) pair, keyed the way the header names the source. The Set
+// is why a line that repeats an id credits it once; the string check is why an id no header
+// line declared is dropped rather than counted under `undefined`.
+function tally(rows, sourceUrls) {
+    const counts = new Map();
+
+    for (const srcs of rows) {
+        if (!Array.isArray(srcs)) continue;
+        for (const id of new Set(srcs)) {
+            const url = sourceUrls[id];
+            if (typeof url !== 'string') continue;
+
+            const key = shortUrl(url);
+            counts.set(key, (counts.get(key) || 0) + 1);
+        }
+    }
+
+    return counts;
 }
