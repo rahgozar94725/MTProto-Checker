@@ -509,6 +509,39 @@ func resolveAddr(hostEnv, portEnv string) string {
 	return net.JoinHostPort(host, fmt.Sprintf("%d", port))
 }
 
+// allowedHosts is the set of Host values sameOriginOnly accepts, built in main()
+// from the address actually bound. Empty turns the check off — which is both the
+// HOST=0.0.0.0 case and the state every test that does not install one runs in.
+var allowedHosts map[string]struct{}
+
+// hostAllowlist returns the Host values a browser can legitimately carry for a
+// server bound to addr, or nil when there is nothing to pin.
+//
+// Only a loopback bind yields a list. A server on 0.0.0.0 or a LAN address is
+// reached by names this process cannot know, so any set it invented would refuse
+// the real page; that deployment is already the documented no-auth opt-in, where
+// anyone routable can drive the endpoints headerless and rebinding buys an
+// attacker nothing they could not do directly. Narrowing it further would need
+// the operator to name the hosts, which is a config surface nobody has asked for.
+//
+// All three loopback spellings are listed regardless of which one addr used: the
+// browser is opened at the bound address, but a user typing localhost into the
+// bar reaches the same server and must not be refused.
+func hostAllowlist(addr string) map[string]struct{} {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return nil
+	}
+	allowed := make(map[string]struct{}, 3)
+	for _, h := range []string{"127.0.0.1", "localhost", "[::1]"} {
+		allowed[h+":"+port] = struct{}{}
+	}
+	return allowed
+}
+
 // shouldOpenBrowser reports whether startup should try to launch a browser:
 // only when NO_BROWSER is unset (any non-empty value suppresses) and the bound
 // host is loopback. Binding a non-loopback address — HOST=0.0.0.0 on a
@@ -707,8 +740,24 @@ func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
 // and every script against the documented POST /check API send neither, while
 // browsers send Sec-Fetch-Site on every request. same-site is rejected along
 // with cross-site — a sibling subdomain is not this origin.
+//
+// The Host check comes first and is not decoration. The Origin comparison below
+// reads r.Host, which is whatever the browser was told to ask for, so on its own
+// it is satisfiable by DNS rebinding: a page served from evil.test:3000 whose
+// name is then repointed at 127.0.0.1 sends Host: evil.test:3000, a matching
+// Origin and Sec-Fetch-Site: same-origin. Both arms would pass, and the browser
+// would treat the responses as same-origin and let the attacker read them —
+// turning /check into an accurate port scanner of the victim's loopback and LAN
+// and handing /fetch-sources' bodies back. Pinning Host to the address actually
+// bound is what makes the Origin comparison mean anything.
 func sameOriginOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if len(allowedHosts) > 0 {
+			if _, ok := allowedHosts[strings.ToLower(r.Host)]; !ok {
+				jsonResponse(w, http.StatusForbidden, map[string]string{"error": "unexpected Host"})
+				return
+			}
+		}
 		switch r.Header.Get("Sec-Fetch-Site") {
 		case "", "same-origin", "none":
 		default:
@@ -1136,6 +1185,14 @@ func main() {
 	addr := resolveAddr(os.Getenv("HOST"), os.Getenv("PORT"))
 	log.Printf("MTProto Checker %s", version)
 	log.Printf("Server running at http://%s", addr)
+
+	// Said out loud rather than left to be inferred: on a non-loopback bind the
+	// allowlist is empty, so sameOriginOnly's Host check is off and a rebound
+	// name satisfies its Origin comparison.
+	allowedHosts = hostAllowlist(addr)
+	if len(allowedHosts) == 0 {
+		log.Printf("WARNING: %s is not loopback — the Host check is off and there is no auth", addr)
+	}
 
 	srv := &http.Server{
 		Addr:         addr,

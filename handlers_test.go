@@ -309,3 +309,92 @@ func TestEmbeddedModulesAreServed(t *testing.T) {
 		t.Error("the served module is not parse.js")
 	}
 }
+
+// postFromHost is postWithHeaders with control over r.Host. Setting a Host
+// header does nothing in Go — net/http reads the request's Host field — so a
+// rebinding request has to be built rather than configured.
+func postFromHost(t *testing.T, path, host string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("{"))
+	req.Host = host
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	newMux().ServeHTTP(rec, req)
+	return rec
+}
+
+// A rebinding attack makes the browser's own headers internally consistent:
+// the page really is served from evil.test:3000, so Sec-Fetch-Site is
+// same-origin and Origin matches r.Host. Both arms of the guard pass, and the
+// response comes back readable — which is what turns /check into an accurate
+// port scanner of the victim's loopback. The Host allowlist is the only thing
+// that separates that request from the real page's.
+func TestEndpointsRejectARebindingHost(t *testing.T) {
+	defer withAllowedHosts(t, "127.0.0.1:3000")()
+
+	rebound := map[string]string{
+		"Sec-Fetch-Site": "same-origin",
+		"Origin":         "http://evil.test:3000",
+	}
+
+	for _, path := range postPaths {
+		rec := postFromHost(t, path, "evil.test:3000", rebound)
+
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s with Host: evil.test:3000 = %d, want 403", path, rec.Code)
+		}
+		var body map[string]string
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Errorf("POST %s: body is not JSON: %v (%q)", path, err, rec.Body.String())
+		} else if body["error"] == "" {
+			t.Errorf("POST %s: body = %q, want an error field", path, rec.Body.String())
+		}
+	}
+}
+
+// The other half: every spelling the real page can arrive as still gets in,
+// including the headerless scripting path, which sends no Origin at all.
+func TestEndpointsAllowEveryBoundHostSpelling(t *testing.T) {
+	defer withAllowedHosts(t, "127.0.0.1:3000")()
+
+	for _, host := range []string{"127.0.0.1:3000", "localhost:3000", "[::1]:3000", "LOCALHOST:3000"} {
+		for name, headers := range map[string]map[string]string{
+			"no headers":  {},
+			"same-origin": {"Sec-Fetch-Site": "same-origin", "Origin": "http://" + host},
+		} {
+			rec := postFromHost(t, "/fetch-sources", host, headers)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("POST from Host %q with %s = %d, want 400 — the guard rejected its own page",
+					host, name, rec.Code)
+			}
+		}
+	}
+}
+
+// A non-loopback bind has no name to pin, so the allowlist is empty and the
+// Host check is off. Pinned in this direction because the alternative — an
+// empty map read as "allow nothing" — would 403 every request on a
+// HOST=0.0.0.0 deployment, which is supported.
+func TestOriginGuardSkipsTheHostCheckWithoutAnAllowlist(t *testing.T) {
+	defer withAllowedHosts(t, "0.0.0.0:3000")()
+
+	rec := postFromHost(t, "/fetch-sources", "anything.test:3000", nil)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 — the Host check should be off", rec.Code)
+	}
+}
+
+// withAllowedHosts installs the allowlist main() would have built and returns
+// the restore. allowedHosts is nil in every other test, which is what keeps
+// the rest of this file's requests (Host: example.com) unaffected.
+func withAllowedHosts(t *testing.T, addr string) func() {
+	t.Helper()
+	prev := allowedHosts
+	allowedHosts = hostAllowlist(addr)
+	return func() { allowedHosts = prev }
+}
