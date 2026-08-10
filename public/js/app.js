@@ -128,6 +128,9 @@ function updateStartBtn() {
     btn.innerText = idle ? t.startBtn : t.stopBtn;
     btn.className = idle ? 'btn-start' : 'btn-stop';
     btn.disabled = false;
+    // Every scan-state transition already runs through here, and Load-list is the other control
+    // that has to follow one -- see updateLoadBtn.
+    updateLoadBtn();
 }
 
 function setScanUI(scanning) {
@@ -706,7 +709,37 @@ async function loadUserSources() {
     return proxies.map(p => p.original).join('\n');
 }
 
+// #loadListBtn sits in .btn-row, which body.scanning does not hide -- the collapse covers the
+// .io-pane and nothing else -- so the button stays live through a scan and through its own
+// in-flight load. Both are wrong, and for the same reason: a load replaces
+// state.snapshotAttribution and snapshotSourceUrls, which is what finish() credits the scan
+// against, so one landing mid-scan scores sources the running scan was never ordered by. A
+// second click while the first is in flight also duplicates every /fetch-sources POST and
+// overwrites the textarea twice, with nothing on the page saying a load is running.
+let snapshotLoading = false;
+
+// The flag is the guard and the disabled attribute is what says so, because a control that
+// silently ignores a click reads as a broken one. Kept in updateStartBtn's call sites rather
+// than its own: those are exactly the scan-state transitions, and a second list of them would
+// be a second thing to keep in step.
+function updateLoadBtn() {
+    document.getElementById('loadListBtn').disabled = snapshotLoading || state.scanState === 'scanning';
+}
+
 async function loadSnapshot() {
+    if (snapshotLoading || state.scanState === 'scanning') return;
+
+    snapshotLoading = true;
+    updateLoadBtn();
+    try {
+        await runSnapshotLoad();
+    } finally {
+        snapshotLoading = false;
+        updateLoadBtn();
+    }
+}
+
+async function runSnapshotLoad() {
     const t = translations[currentLang];
 
     // Sequential, in the documented order, so the activity log reads the way the feature is
