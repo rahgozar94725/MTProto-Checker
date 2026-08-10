@@ -10,11 +10,12 @@ import {
     showToast as paintToast,
 } from './render.js';
 import { createScanState } from './state.js';
-import { parseSnapshot } from './snapshot.js';
+import { parseSnapshot, splitFragment } from './snapshot.js';
 import {
     addSource,
     defaultSources,
     dropDisabledSources,
+    isValidSourceUrl,
     orderForScan,
     parseSources,
     rateBySourceId,
@@ -23,6 +24,7 @@ import {
     serializeSources,
     setEnabled,
     shortUrl,
+    MAX_SOURCES_PER_REQUEST,
     SNAPSHOT_SOURCE_URL,
 } from './sources.js';
 
@@ -104,7 +106,11 @@ function setLanguage(lang) {
 
     document.getElementById('inputProxies').placeholder = table.inputPlaceholder;
     document.getElementById('outputProxies').placeholder = table.outputPlaceholder;
-    document.getElementById('sourceUrlInput').placeholder = table.sourceUrlPlaceholder;
+    // The field's only name is its placeholder -- the row has no room for a visible label --
+    // so the accessible name has to follow the language with it.
+    const sourceUrlInput = document.getElementById('sourceUrlInput');
+    sourceUrlInput.placeholder = table.sourceUrlPlaceholder;
+    sourceUrlInput.setAttribute('aria-label', table.sourceUrlPlaceholder);
 }
 
 function updatePauseBtn() {
@@ -359,6 +365,14 @@ async function runCheckStream(proxies, linkMap) {
     }
 }
 
+// Everything from the first `#` on every line is a source-side comment, not part of the link.
+// splitFragment is snapshot.js's so that this and scripts/build-snapshot.mjs cannot drift: the
+// builder strips before it collects, and anything that reaches proxy.original here is what the
+// user copies back out.
+function stripFragments(text) {
+    return text.split('\n').map(line => splitFragment(line).link).join('\n');
+}
+
 async function startCheck() {
     try {
         const t = translations[currentLang];
@@ -371,7 +385,20 @@ async function startCheck() {
         state.checkedKeys = new Set();
         state.allProxies = [];
 
-        const { proxies: validLinks, skipped, duplicates } = parseProxyList(input);
+        // Stripped here rather than in parse.js, whose behaviour is pinned by a golden baseline
+        // recorded before the ES-module refactor. This is the one place every textarea input
+        // meets -- a paste, a dropped file and the file picker all write to it -- and a line
+        // like `tg://…&secret=ee00# MTProto EU (100)` would otherwise ride proxy.original into
+        // globalLinkMap, workingProxies[].link and out through the clipboard and both exports.
+        //
+        // It changes one more thing, deliberately: a *space* before the `#` used to land inside
+        // the last parameter value, so that line parsed to the secret `ee00 ` -- a different
+        // proxyKey, and a secret the server only rescues through decodeSecret's junk-trim path.
+        // Stripping first makes it the same proxy as the bare line, which is why a paste holding
+        // both forms now counts one of them as a duplicate. That is the same hazard the snapshot
+        // grammar's no-space-before-`#` rule exists for, closed on the reading side.
+        const { proxies: validLinks, skipped, duplicates } =
+            parseProxyList(stripFragments(input));
         state.lastSkipped = skipped;
         if (duplicates > 0) log(`Removed ${duplicates} duplicate entries.`);
 
@@ -644,20 +671,39 @@ async function loadSnapshotFile() {
 // Step 3: the sources the user added themselves. The built-ins are what the nightly snapshot is
 // built from, so fetching them here would only duplicate it -- a user-added list is the one
 // thing no snapshot can carry. → their links as text, '' when there are none or none answered.
+//
+// Chunked to MAX_SOURCES_PER_REQUEST because the server answers 413 past that many urls in one
+// request; a batch that fails costs its own sources and nothing else. Sequential rather than
+// concurrent: the server caps requests in flight anyway, and this way the drawer reads in order.
 async function loadUserSources() {
     const urls = sources.filter(source => source.addedByUser && source.enabled).map(source => source.url);
     if (urls.length === 0) return '';
 
-    try {
-        const { proxies } = parseProxyList(await fetchSources(urls));
-        log(`Loaded ${proxies.length} links from ${urls.length} of your own sources.`);
-        return proxies.map(p => p.original).join('\n');
-    } catch (err) {
-        // An error, unlike the live-snapshot step: nothing else covers a user's own list, so
-        // the drawer opening is the point.
-        log(`USER SOURCES: ${err.message}`, true);
-        return '';
+    const texts = [];
+    let failed = 0;
+
+    for (let i = 0; i < urls.length; i += MAX_SOURCES_PER_REQUEST) {
+        const batch = urls.slice(i, i + MAX_SOURCES_PER_REQUEST);
+        try {
+            texts.push(await fetchSources(batch));
+        } catch (err) {
+            failed += batch.length;
+            // An error, unlike the live-snapshot step: nothing else covers a user's own list, so
+            // the drawer opening is the point.
+            log(`USER SOURCES: ${err.message}`, true);
+        }
     }
+
+    if (texts.length === 0) return '';
+
+    // Stripped before parsing, the same rule the snapshot builder follows and for the same
+    // reason -- see stripFragments. Done here as well as in startCheck because these links are
+    // deduped against the snapshot's and written to the textarea, so a comment left on them
+    // would be a stray `#` in front of the user before a scan ever starts.
+    const { proxies } = parseProxyList(stripFragments(texts.join('\n')));
+    log(`Loaded ${proxies.length} links from ${urls.length - failed} of your own sources.`);
+
+    return proxies.map(p => p.original).join('\n');
 }
 
 async function loadSnapshot() {
@@ -755,6 +801,15 @@ function applySources(next) {
 
 function addSourceFromInput() {
     const field = document.getElementById('sourceUrlInput');
+
+    // addSource drops an unusable url too, but silently, which here would read as a button that
+    // did nothing. Checked before it so the toast can say why -- and the field keeps its text,
+    // because a rejected url is one the user is about to correct rather than retype.
+    if (field.value.trim() && !isValidSourceUrl(field.value)) {
+        showToast(translations[currentLang].toastSourceInvalid, true);
+        return;
+    }
+
     // addSource ignores a blank and a duplicate on purpose -- both are ordinary typing, not
     // errors worth a toast -- so the field is cleared either way rather than only on success.
     applySources(addSource(sources, field.value));

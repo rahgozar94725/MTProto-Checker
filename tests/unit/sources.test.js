@@ -8,11 +8,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import {
     DEFAULT_SOURCES,
+    MAX_SOURCES_PER_REQUEST,
     addSource,
     defaultSources,
     dropDisabledSources,
+    isValidSourceUrl,
     orderForScan,
     parseSources,
     rateBySourceId,
@@ -157,6 +162,97 @@ test('addSource ignores a URL already in the list', () => {
 
 test('addSource ignores an empty or whitespace-only URL', () => {
     assert.deepEqual(addSource(defaultSources(), '   '), defaultSources());
+});
+
+// The server dials these on the page's behalf and its own policy is https, or http through
+// SOCKS5 — so anything else is answered with an empty 200 and reported to the user as a
+// successful load of zero links.
+test('isValidSourceUrl accepts only an absolute http or https url', () => {
+    for (const url of [USER_URL, 'http://192.0.2.1:8080/list.txt', `  ${USER_URL}  `]) {
+        assert.equal(isValidSourceUrl(url), true, url);
+    }
+    for (const url of ['file:///etc/passwd', 'ftp://example.invalid/l.txt', 'data:text/plain,x',
+        'javascript:alert(1)', 'example.invalid/list.txt', '/list.txt', '', '   ', undefined,
+        // Credentials are refused rather than stripped: this value is persisted in localStorage
+        // and posted to /fetch-sources on every load.
+        'https://user:pw@example.invalid/list.txt', 'https://user@example.invalid/list.txt']) {
+        assert.equal(isValidSourceUrl(url), false, String(url));
+    }
+});
+
+// Not merely unfetchable: shortUrl() strips the RAW_PREFIX including its scheme, so a
+// scheme-less url shortens to the same key a built-in shortens to and recordScan would credit
+// one source's links to the other.
+test('a scheme-less url that would collide with a built-in is rejected', () => {
+    const collides = shortUrl(DEFAULT_SOURCES[0]);
+
+    assert.equal(shortUrl(collides), collides, 'the collision is real');
+    assert.deepEqual(addSource(defaultSources(), collides), defaultSources());
+});
+
+test('addSource ignores a url isValidSourceUrl rejects', () => {
+    assert.deepEqual(addSource(defaultSources(), 'file:///etc/passwd'), defaultSources());
+});
+
+// Both the dedupe here and shortUrl() are exact string comparisons, so an unnormalized variant
+// of a built-in would be fetched twice and scored as two independent sources.
+test('addSource normalizes a url so every spelling of a built-in is a duplicate', () => {
+    const variants = [
+        DEFAULT_SOURCES[0].replace('https://raw.', 'HTTPS://RAW.'),
+        DEFAULT_SOURCES[0].replace('.com/', '.com:443/'),
+        // `new URL().href` keeps both of these verbatim while reporting search and hash empty,
+        // which is why the normalizer reassembles from the parts instead.
+        `${DEFAULT_SOURCES[0]}#`,
+        `${DEFAULT_SOURCES[0]}?`,
+    ];
+
+    for (const variant of variants) {
+        assert.deepEqual(addSource(defaultSources(), variant), defaultSources(), variant);
+        assert.equal(addSource([], variant)[0].url, DEFAULT_SOURCES[0], variant);
+    }
+});
+
+// parseSources is the untrusted entry point, not addSource: a list written by an older build,
+// or by any other page on this origin, can hold a url addSource would refuse today. A
+// scheme-less one is the damaging case — shortUrl() leaves it alone, so it is a phantom row
+// carrying a built-in's key, and disabling it drops that built-in's links from the next load.
+test('parseSources drops a stored url addSource would refuse', () => {
+    const collides = shortUrl(DEFAULT_SOURCES[0]);
+    const stored = serializeSources([
+        { url: collides, enabled: true },
+        { url: 'file:///etc/passwd', enabled: true },
+        { url: USER_URL, enabled: true },
+    ]);
+
+    assert.deepEqual(parseSources(stored).filter(s => s.addedByUser).map(s => s.url), [USER_URL]);
+});
+
+// The other half: a stored url addSource would have *rewritten*. Validation alone leaves the
+// variant intact, and it then matches neither DEFAULT_SOURCES (exact compare) nor RAW_PREFIX
+// (case-sensitive) — a phantom user source fetched a second time and scored on its own.
+test('parseSources normalizes a stored url the same way addSource would', () => {
+    const variant = DEFAULT_SOURCES[0].replace('https://raw.', 'HTTPS://RAW.');
+    const list = parseSources(serializeSources([
+        { url: variant, enabled: true },
+        // The default port and the uppercase host both normalize away.
+        { url: 'https://EXAMPLE.invalid:443/my-list.txt', enabled: true },
+    ]));
+
+    assert.deepEqual(list.filter(s => s.addedByUser).map(s => s.url), [USER_URL]);
+    assert.equal(list.length, DEFAULT_SOURCES.length + 1, 'the variant is the built-in, not a new row');
+});
+
+// app.js chunks POST /fetch-sources to this number. It is the server's constant, and the two
+// files have no other connection — a drift would silently 413 the whole user-source step.
+test('MAX_SOURCES_PER_REQUEST is the maxSources main.go enforces', () => {
+    const go = readFileSync(fileURLToPath(new URL('../../main.go', import.meta.url)), 'utf8');
+    // Loose on formatting, exact on the value: the point is the number, and a red JS job
+    // saying "main.go no longer declares maxSources" because someone aligned a const block
+    // differently would be noise.
+    const declared = /\bmaxSources\b[^=\n]*=\s*(\d+)/.exec(go);
+
+    assert.ok(declared, 'main.go no longer declares maxSources');
+    assert.equal(MAX_SOURCES_PER_REQUEST, Number(declared[1]));
 });
 
 test('removeSource drops a user-added source', () => {

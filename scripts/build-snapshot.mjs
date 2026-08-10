@@ -26,6 +26,7 @@ import { argv, exit, stderr, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { parseLink, proxyKey } from '../public/js/parse.js';
+import { splitFragment } from '../public/js/snapshot.js';
 import { DEFAULT_SOURCES, shortUrl } from '../public/js/sources.js';
 
 // Source ids are positional: index 3 there is `src=3` in every line of the snapshot, so
@@ -40,12 +41,6 @@ const DEFAULT_OUTPUT = 'snapshot.txt';
 // Re-exported rather than defined here: the UI's scoring joins a snapshot header back onto the
 // source model, so both sides have to shorten a URL the same way.
 export { shortUrl };
-
-// Everything from the first `#` is a source-side comment, not part of the link.
-function stripFragment(line) {
-    const hash = line.indexOf('#');
-    return (hash === -1 ? line : line.slice(0, hash)).trimEnd();
-}
 
 export function formatLine(link, srcs) {
     return `${link}#seen=${srcs.length};src=${srcs.join(',')}`;
@@ -62,7 +57,9 @@ export function collect(texts) {
         let spam = 0;
 
         for (const line of text.split('\n')) {
-            const result = parseLink(stripFragment(line));
+            // Everything from the first `#` is a source-side comment, not part of the link. The
+            // rule lives in snapshot.js because the reader has to apply it identically.
+            const result = parseLink(splitFragment(line).link);
             if (!result.ok) {
                 if (result.reason === 'spam') spam++;
                 continue;

@@ -23,9 +23,40 @@
 import { parseLink, proxyKey } from './parse.js';
 
 const GENERATED_RE = /^#\s*generated\s+(\S+)/;
-const SOURCE_RE = /^#\s*(\d+)\s+(\S+)/;
+// The index is bounded because `sources[Number(id)] = url` on a sparse array is an allocation
+// the header controls: `# 4294967294 x` gives every later read of that array a four-billion
+// slot walk, and rateBySourceId() maps over it on the way into a scan — the page loads and
+// then freezes on Start. Four digits is an order of magnitude past the 17 real sources, and a
+// line that overruns it fails the match entirely, which parseSnapshot already treats as a
+// comment. Only reachable through a compromised snapshot branch, and it costs nothing.
+const SOURCE_RE = /^#\s*(\d{1,4})\s+(\S+)/;
 // Only the exact grammar counts as attribution; anything else is a source-side comment.
-const FRAGMENT_RE = /^seen=(\d+);src=(\d+(?:,\d+)*)$/;
+//
+// All three quantities are bounded, for the same reason the header index is. `seen=` past
+// Number's range reads back as Infinity, and `Infinity - Infinity` is the NaN that would make
+// orderForScan's comparator inconsistent rather than merely wrong. Each `src=` id is bounded in
+// digits, and the *list* is bounded in length — without the second bound one line could declare
+// half a million ids inside the 1 MiB per-source cap, and every id is walked again by
+// bestRate(), dropDisabledSources() and tally(). 32 is an order of magnitude past the 17 real
+// sources. A fragment that overruns any of them fails the match, which leaves the line's link
+// intact and unattributed — what an undeclared `src=` id already does.
+const FRAGMENT_RE = /^seen=(\d{1,6});src=(\d{1,4}(?:,\d{1,4}){0,31})$/;
+
+// → { link, fragment }: everything before the first `#` and everything after it.
+//
+// The one place that rule is written down. Three callers depend on agreeing about where a link
+// ends — parseSnapshot below, scripts/build-snapshot.mjs when it collects the corpus, and
+// app.js when it loads a user's own source list — and they fail differently when they drift.
+// The builder's failure is a padded secret in the collected key; the client's is a comment
+// riding `parseLink().proxy.original` all the way out through the clipboard and the exports,
+// so a line like `tg://…&secret=ee00# MTProto EU (100)` is copied back as
+// `tg://…&secret=ee00# MTProto EU (100) # Ping: 120ms`.
+export function splitFragment(line) {
+    const hash = line.indexOf('#');
+    if (hash === -1) return { link: line.trimEnd(), fragment: '' };
+
+    return { link: line.slice(0, hash).trimEnd(), fragment: line.slice(hash + 1) };
+}
 
 // → { generatedAt, sources, links, attribution }
 //   generatedAt  the ISO string off the header, '' when there is no header line
@@ -51,18 +82,23 @@ export function parseSnapshot(text = '') {
             continue;
         }
 
-        const hash = line.indexOf('#');
-        const result = parseLink(hash === -1 ? line : line.slice(0, hash));
+        const { link: bare, fragment } = splitFragment(line);
+        const result = parseLink(bare);
         if (!result.ok) continue;
 
         links.push(result.proxy.original);
 
-        const meta = FRAGMENT_RE.exec(hash === -1 ? '' : line.slice(hash + 1));
+        const meta = FRAGMENT_RE.exec(fragment);
         if (meta) {
-            attribution.set(proxyKey(result.proxy), {
-                seen: Number(meta[1]),
-                srcs: meta[2].split(',').map(Number),
-            });
+            const srcs = meta[2].split(',').map(Number);
+            // `seen` is how many sources published the proxy, and the writer emits exactly
+            // `srcs.length` — so a line where they disagree was not written by the builder. It
+            // is the *first* scan-order key (orderForScan sorts on it before source score), so
+            // a compromised snapshot branch could otherwise pin an attacker-operated proxy to
+            // the head of every user's next scan with one inflated number.
+            if (Number(meta[1]) === srcs.length) {
+                attribution.set(proxyKey(result.proxy), { seen: srcs.length, srcs });
+            }
         }
     }
 

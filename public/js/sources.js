@@ -21,6 +21,13 @@ import { proxyKey } from './parse.js';
 
 export const RAW_PREFIX = 'https://raw.githubusercontent.com/';
 
+// Mirrors `maxSources` in main.go, which answers 413 to a POST /fetch-sources carrying more.
+// The client chunks to it rather than capping the list: how many lists a user may keep is not
+// the same question as how many urls fit in one request, and a user with 21 sources otherwise
+// loses the whole step to a single rejected POST. tests/unit/sources.test.js asserts the two
+// numbers still agree, since nothing else would notice them drifting apart.
+export const MAX_SOURCES_PER_REQUEST = 20;
+
 // Where the nightly rebuild is published: .github/workflows/snapshot.yml force-pushes the file
 // to the orphan `snapshot` branch, and release.yml curls the same URL into public/data/ before
 // building. The button fetches it through the server (POST /fetch-sources) rather than from the
@@ -83,8 +90,18 @@ export function parseSources(stored) {
     const seen = new Map();
     for (const entry of entries) {
         if (!entry || typeof entry.url !== 'string') continue;
-        if (seen.has(entry.url)) continue;
-        seen.set(entry.url, { enabled: entry.enabled !== false, score: readScore(entry.score) });
+        // Checked *and normalized* on the way in, not only in addSource: this is the module's
+        // untrusted entry point, and a list written by an older build (or by any other page on
+        // this origin) can hold a url addSource would refuse or rewrite today. Both matter.
+        // A scheme-less url survives shortUrl() unchanged, so it collides with the built-in it
+        // shortens to and disabling that phantom row silently drops the built-in's links from a
+        // load; an unnormalized `HTTPS://RAW.…` matches neither DEFAULT_SOURCES nor RAW_PREFIX,
+        // so it is fetched a second time and scored as a source of its own.
+        if (!isValidSourceUrl(entry.url)) continue;
+
+        const url = normalizeSourceUrl(entry.url);
+        if (seen.has(url)) continue;
+        seen.set(url, { enabled: entry.enabled !== false, score: readScore(entry.score) });
     }
 
     const builtIn = defaultSources().map(source => withStored(source, seen.get(source.url)));
@@ -125,13 +142,67 @@ export function setEnabled(sources, url, enabled) {
     return sources.map(source => (source.url === url ? { ...source, enabled } : source));
 }
 
-// Ignores a duplicate and a blank rather than reporting them: the caller is a text field and
-// both are ordinary typing, not errors worth a toast.
-export function addSource(sources, url) {
-    const trimmed = url.trim();
-    if (!trimmed || sources.some(source => source.url === trimmed)) return sources;
+// → true for an absolute http or https url, false for everything else.
+//
+// Two things go wrong without it. The url is one the *server* dials on the page's behalf, and
+// its policy (checkSourceURL in main.go) is https, or http only through SOCKS5 — so a
+// `file:///etc/passwd` is answered with an empty 200 and reported to the user as `Loaded 0
+// links from 1 of your own sources`, a success line for a source that was never fetchable. And
+// a url without a scheme breaks shortUrl(): `raw.githubusercontent.com/a/b.txt` shortens to the
+// same key a built-in shortens to, so recordScan would credit one source's links to the other.
+//
+// http stays accepted because the SOCKS5 case is real; the server is still the one that decides
+// whether this particular request may use it.
+export function isValidSourceUrl(url) {
+    let parsed;
+    try {
+        parsed = new URL(String(url).trim());
+    } catch {
+        return false;
+    }
 
-    return [...sources, { url: trimmed, enabled: true, addedByUser: true }];
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+
+    // Credentials are refused rather than normalized away: this url is persisted in
+    // localStorage under `sources` and posted to /fetch-sources on every load, so accepting one
+    // would store and transmit a password the user never meant to hand to either.
+    return parsed.username === '' && parsed.password === '';
+}
+
+// The stored form of a source url. The dedupe in addSource and shortUrl() are both exact string
+// comparisons, so `HTTPS://RAW.githubusercontent.com/…` and `https://raw.githubusercontent.com:443/…`
+// would otherwise be neither duplicates of the built-in they name nor shortenable to its key --
+// one list fetched twice and scored as two sources. `new URL()` lowercases the scheme and host,
+// drops a default port and resolves the path, and is idempotent, so a url already in this form
+// is returned unchanged. Only valid for a url isValidSourceUrl accepts.
+//
+// Reassembled from the parts rather than read off `.href`, which keeps a trailing `?` and a
+// trailing `#` verbatim while reporting `search` and `hash` as empty -- two more spellings of
+// the same list that would each become a source of its own.
+//
+// The scheme is deliberately *not* normalized away: `http://` and `https://` of the same path
+// are different fetches under the server's own policy (http is only allowed through SOCKS5), so
+// a user who adds the http variant of a built-in really does get a second source. Accepted --
+// the alternative is silently rewriting what they typed into a request they did not ask for.
+function normalizeSourceUrl(url) {
+    const { origin, pathname, search, hash } = new URL(String(url).trim());
+
+    return `${origin}${pathname}${search}${hash}`;
+}
+
+// Ignores a duplicate and a blank rather than reporting them: the caller is a text field and
+// both are ordinary typing, not errors worth a toast. An unusable url is ignored here too --
+// silently, because the UI checks first so it can say why. parseSources applies the same check
+// and the same normalization, so a stored list cannot reintroduce what this refuses.
+export function addSource(sources, url) {
+    // A blank field is an unusable url as far as isValidSourceUrl is concerned, so it needs no
+    // check of its own.
+    if (!isValidSourceUrl(url)) return sources;
+
+    const normalized = normalizeSourceUrl(url);
+    if (sources.some(source => source.url === normalized)) return sources;
+
+    return [...sources, { url: normalized, enabled: true, addedByUser: true }];
 }
 
 // Built-ins are not removable — disabling one is how it stops being scanned, which keeps its
@@ -233,15 +304,17 @@ export function dropDisabledSources(proxies, { attribution = new Map(), sources 
 // Anything the snapshot never mentioned ranks 0 on both keys and lands at the end in paste
 // order — Array.prototype.sort is stable, so a pasted list with no attribution at all comes
 // back exactly as it went in.
+// Both keys are computed in the decorate step rather than in the comparator: a comparator runs
+// O(n log n) times, so a 10 000-proxy scan called bestRate() a few hundred thousand times
+// (~n·log₂n comparisons, two calls each) to answer a question with one answer per proxy.
 export function orderForScan(proxies, { attribution = new Map(), rates = [] } = {}) {
     return proxies
-        .map(proxy => ({ proxy, meta: attribution.get(proxyKey(proxy)) }))
-        .sort((a, b) => seenOf(b.meta) - seenOf(a.meta) || bestRate(b.meta, rates) - bestRate(a.meta, rates))
+        .map(proxy => {
+            const meta = attribution.get(proxyKey(proxy));
+            return { proxy, seen: meta ? meta.seen : 0, rate: bestRate(meta, rates) };
+        })
+        .sort((a, b) => b.seen - a.seen || b.rate - a.rate)
         .map(entry => entry.proxy);
-}
-
-function seenOf(meta) {
-    return meta ? meta.seen : 0;
 }
 
 function bestRate(meta, rates) {

@@ -11,12 +11,26 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { SNAPSHOT_SOURCE_URL } from '../../public/js/sources.js';
+
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 function workflow(name) {
     // .gitattributes pins these to LF, but a stale pre-.gitattributes checkout can still
     // hold CRLF, and every assertion below is line-anchored.
     return readFileSync(`${repoRoot}.github/workflows/${name}`, 'utf8').replace(/\r\n/g, '\n');
+}
+
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// A job's block: from `  <name>:` to the next line at that indent or shallower.
+function jobBlock(text, name) {
+    const lines = text.split('\n');
+    const start = lines.findIndex(l => l === `  ${name}:`);
+    assert.notEqual(start, -1, `workflow has no ${name} job`);
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex(l => /^ {0,2}\S/.test(l));
+    return rest.slice(0, end === -1 ? rest.length : end).join('\n');
 }
 
 // The `on:` block: from the `on:` key to the next top-level key.
@@ -124,9 +138,71 @@ test('release.yml pins the publishing workflow by SHA', () => {
     assert.match(text, /^\s+uses: rahgozar94725\/release-workflows\/\.github\/workflows\/release\.yml@[0-9a-f]{40}\b/m);
 });
 
+// Three files have to agree on one branch name and one filename, and none of them mentions the
+// others: the button in the browser fetches SNAPSHOT_SOURCE_URL, the nightly job pushes to the
+// branch that url names, and release.yml curls the same place to bake the file in. Rename the
+// branch in snapshot.yml alone and every suite here stays green while every deployed binary
+// degrades permanently to the committed placeholder — silently, because a live-snapshot failure
+// is logged plainly by design.
+test('the snapshot branch and filename agree across sources.js, snapshot.yml and release.yml', () => {
+    const url = new URL(SNAPSHOT_SOURCE_URL);
+    assert.equal(url.host, 'raw.githubusercontent.com');
+
+    // /<owner>/<repo>/<branch>/<file>
+    const [, owner, repo, branch, ...rest] = url.pathname.split('/');
+    const file = rest.join('/');
+
+    assert.equal(`${owner}/${repo}`, 'rahgozar94725/MTProto-Checker');
+    assert.equal(rest.length, 1, 'the snapshot branch holds its files at the root');
+
+    const snapshot = workflow('snapshot.yml');
+    assert.match(snapshot, new RegExp(`^\\s+git init -q -b ${branch}$`, 'm'));
+    assert.match(snapshot, new RegExp(`^\\s+git push --force .*\\s${branch}$`, 'm'));
+    assert.match(snapshot, new RegExp(`^\\s+git add ${escapeRe(file)} ${escapeRe(file)}\\.sha256$`, 'm'));
+
+    const release = workflow('release.yml');
+    assert.match(release, new RegExp(`github\\.repository \\}\\}/${branch}\\b`),
+        'release.yml curls a different branch than the nightly job publishes');
+    assert.match(release, new RegExp(`\\$base/${escapeRe(file)}"`),
+        'release.yml fetches a different filename than the nightly job publishes');
+});
+
+// The other half of the same chain, and the one that fails most quietly: the fetch can be
+// perfectly correct and the file still land somewhere `//go:embed public` serves under a name
+// the page never asks for. Point the cp at public/data/nightly.txt and every gate stays green
+// while every released binary serves the committed RFC 5737 placeholder for good.
+test('release.yml copies the snapshot to the path the page fetches it from', () => {
+    const app = readFileSync(`${repoRoot}public/js/app.js`, 'utf8');
+    const declared = /^const SNAPSHOT_URL = '([^']+)';$/m.exec(app);
+
+    assert.ok(declared, 'app.js no longer declares SNAPSHOT_URL');
+    // The embed is rooted at public/, and the url is served from its root.
+    const embedded = `public${declared[1]}`;
+
+    assert.ok(readFileSync(`${repoRoot}${embedded}`, 'utf8').length > 0,
+        `${embedded} is not in the working tree, so the placeholder never shipped either`);
+    // Escaped: the `.` in snapshot.txt is otherwise a wildcard, and a future path with a `+`
+    // or a `(` in it would widen the assertion silently rather than fail.
+    assert.match(workflow('release.yml'), new RegExp(`^\\s+cp "[^"]+" ${escapeRe(embedded)}$`, 'm'),
+        'the nightly file has to overwrite the very file the page fetches');
+});
+
 test('test.yml ignores pushes to the snapshot branch', () => {
     const on = triggerBlock(workflow('test.yml'));
 
     assert.match(on, /^\s+push:\n\s+branches-ignore:\n\s+- snapshot$/m,
         'the nightly bot commit would otherwise run the whole test matrix');
+});
+
+// /fetch-sources fans goroutines over one results slice, one http.Client and one byte budget,
+// and a plain `go test` sees none of it. Asserted inside the go job rather than anywhere in the
+// file, so moving the step somewhere it never runs is a failure and not a rename.
+test('the go job runs the suite under the race detector, after gofmt', () => {
+    const go = jobBlock(workflow('test.yml'), 'go');
+    const raceAt = go.indexOf('go test ./... -short -race');
+
+    assert.notEqual(raceAt, -1, 'the go job no longer runs the race detector');
+    // gofmt is deterministic and fast and the race step is neither; a job stops at its first
+    // failing step, so the slow one going first would let it mask a formatting failure.
+    assert.ok(go.indexOf('gofmt -l .') < raceAt, 'gofmt has to run before the race step');
 });

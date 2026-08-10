@@ -41,8 +41,11 @@ jobs:
       # public/js/app.js is excluded because its reported coverage is a measurement
       # artifact, not a real gap: tests/helpers/dom.js cache-busts every mount with a
       # ?mount=N specifier, so each mount is a separate module URL to the reporter and
-      # none of them accumulates. Functions are not gated — render.js sits at 85.71%
-      # because showToast()'s own setTimeout callback never runs inside a unit test.
+      # none of them accumulates. Functions are not gated at all: the only misses
+      # are timer callbacks, which run or not depending on how long whatever test
+      # follows them happens to take — render.js's showToast() has read 85.71%,
+      # 87.50% and 100% across this suite's life, moved by unrelated tests and by
+      # the file growing rather than by anything about showToast itself.
       #
       # --test-coverage-lines/-branches need Node >= 22.8; setup-node '22' resolves to
       # the latest 22.x, so the pin above is enough.
@@ -68,6 +71,10 @@ jobs:
       # gofmt -l prints offending files and exits 0, so the file list is the
       # failure signal. .gitattributes pins *.go to LF, so this is meaningful
       # on a Linux runner even for a checkout made on Windows.
+      #
+      # Ahead of the race step deliberately: it is fast and deterministic, and a
+      # job stops at its first failing step, so putting the slow timing-sensitive
+      # one first would let it hide a formatting failure.
       - name: gofmt
         run: |
           files=$(gofmt -l .)
@@ -76,6 +83,22 @@ jobs:
             echo "$files"
             exit 1
           fi
+
+      # A separate step rather than -race on the run above, so a data race is
+      # distinguishable in the log from an ordinary failure. What -short actually
+      # drives concurrently is /fetch-sources — goroutines writing one results
+      # slice, sharing one http.Client and one byte budget, plus the in-flight
+      # semaphore — and checkproxy_test.go's handshake against a local fake proxy.
+      # /check-stream's per-proxy goroutines and dnsCache are only reached by the
+      # tests -short skips, so they stay unchecked here; a plain run checks none
+      # of it at all.
+      #
+      # race_test.go stretches checkproxy_test.go's wall-clock budgets under this
+      # build: instrumented, the fake proxy's handshake ran past the 20s budget on
+      # a loaded machine with no DATA RACE reported at all, which made this step a
+      # coin flip until the factor existed.
+      - name: Race detector
+        run: go test ./... -short -race
 
   e2e:
     name: Playwright e2e

@@ -182,7 +182,7 @@ func TestCheckProxyReportsConnectionFailures(t *testing.T) {
 		}
 		// The caller's context has to reach the client: without it the call
 		// would run to its own 1s timeout instead of returning immediately.
-		if elapsed > 500*time.Millisecond {
+		if elapsed > 500*raceTimeoutFactor*time.Millisecond {
 			t.Errorf("took %v to honour an already-cancelled context; want it to return at once", elapsed)
 		}
 	})
@@ -218,7 +218,7 @@ func TestCheckProxyTimesOutOnStalledProxy(t *testing.T) {
 		t.Errorf("returned after %v, before the %ds timeout could fire; "+
 			"the failure is not the timeout", elapsed, timeoutSec)
 	}
-	if elapsed > 3*time.Second {
+	if ceiling := 3 * raceTimeoutFactor * time.Second; elapsed > ceiling {
 		t.Errorf("took %v to give up on a %ds timeout; the context is not bounding the call",
 			elapsed, timeoutSec)
 	}
@@ -339,7 +339,11 @@ func TestCheckProxySucceedsAgainstAWorkingProxy(t *testing.T) {
 	}
 	host, port := startFakeProxy(t, secret)
 
-	const timeoutSec = 20
+	// Generous on purpose: the fake server does its RSA and DH on the same CPU
+	// as the client, and raceTimeoutFactor stretches it further because the
+	// instrumented build ran past 20s on a loaded runner without ever reporting
+	// a race — see race_test.go.
+	const timeoutSec = 20 * raceTimeoutFactor
 
 	ping, err := checkProxy(context.Background(), host, port, validSecret, timeoutSec)
 	if err != nil {
