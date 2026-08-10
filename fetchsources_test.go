@@ -5,8 +5,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +16,20 @@ import (
 	"testing"
 	"time"
 )
+
+// allowLoopbackSources relaxes the SSRF policy for one test: plain HTTP, and
+// loopback destinations only. That is exactly what an httptest server on
+// 127.0.0.1 is, and nothing more — a test that calls this still proves
+// 10.0.0.1 is rejected, which is what makes the redirect test meaningful.
+func allowLoopbackSources(t *testing.T) {
+	t.Helper()
+	origScheme, origIP := allowPlainHTTPSources, allowedSourceIP
+	allowPlainHTTPSources = true
+	allowedSourceIP = func(ip net.IP) bool { return ip.IsLoopback() }
+	t.Cleanup(func() {
+		allowPlainHTTPSources, allowedSourceIP = origScheme, origIP
+	})
+}
 
 // fetchSources posts a {"urls": …} body built from urls and returns the
 // recorded response.
@@ -98,6 +114,8 @@ func TestFetchSourcesRejectsTooManySources(t *testing.T) {
 // The sources are fetched concurrently but concatenated in request order, so a
 // slow first source cannot reorder the output.
 func TestFetchSourcesConcatenatesInRequestOrder(t *testing.T) {
+	allowLoopbackSources(t)
+
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(50 * time.Millisecond)
 		fmt.Fprint(w, "tg://proxy?server=192.0.2.1")
@@ -118,6 +136,8 @@ func TestFetchSourcesConcatenatesInRequestOrder(t *testing.T) {
 
 // One failure does not abort the rest — the working sources still come back.
 func TestFetchSourcesSkipsAFailingSource(t *testing.T) {
+	allowLoopbackSources(t)
+
 	notFound := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nope", http.StatusNotFound)
 	}))
@@ -137,6 +157,8 @@ func TestFetchSourcesSkipsAFailingSource(t *testing.T) {
 // The cap is enforced while reading, not after: a source that keeps sending is
 // cut off, and the server on the other end never gets to write the whole body.
 func TestFetchSourcesRejectsAnOversizedSourceWithoutBufferingIt(t *testing.T) {
+	allowLoopbackSources(t)
+
 	const chunk = 256 * 1024
 	const total = 4 * maxSourceBytes
 
@@ -186,9 +208,98 @@ func TestFetchSourcesRejectsAnOversizedSourceWithoutBufferingIt(t *testing.T) {
 	}
 }
 
+// https only. http stays rejected until Task 13 routes it through SOCKS5.
+func TestFetchSourceRejectsPlainHTTP(t *testing.T) {
+	orig := allowedSourceIP
+	allowedSourceIP = func(ip net.IP) bool { return ip.IsLoopback() }
+	t.Cleanup(func() { allowedSourceIP = orig })
+
+	_, err := fetchSource(context.Background(), "http://127.0.0.1:9/list.txt")
+
+	if err == nil {
+		t.Fatal("fetchSource accepted an http:// source, want it rejected")
+	}
+	if !strings.Contains(err.Error(), "scheme") {
+		t.Errorf("error = %v, want it to name the scheme", err)
+	}
+}
+
+func TestFetchSourceRejectsANonHTTPScheme(t *testing.T) {
+	allowLoopbackSources(t)
+
+	for _, raw := range []string{
+		"file:///etc/passwd",
+		"ftp://example.com/list.txt",
+		"gopher://example.com/",
+		"tg://proxy?server=192.0.2.1",
+	} {
+		if _, err := fetchSource(context.Background(), raw); err == nil {
+			t.Errorf("fetchSource(%q) = nil error, want it rejected", raw)
+		}
+	}
+}
+
+// Resolve-then-check, enforced at dial time: the address is judged after
+// resolution, so a hostname pointing into RFC 1918 is caught the same way a
+// literal is, and there is no window between the check and the connect.
+func TestFetchSourceRejectsAPrivateDestination(t *testing.T) {
+	allowLoopbackSources(t)
+
+	for _, raw := range []string{
+		"https://10.0.0.1/list.txt",
+		"https://192.168.1.1/list.txt",
+		"https://172.16.0.1/list.txt",
+		"https://169.254.169.254/latest/meta-data/",
+	} {
+		_, err := fetchSource(context.Background(), raw)
+		if err == nil {
+			t.Errorf("fetchSource(%q) = nil error, want it rejected", raw)
+			continue
+		}
+		if !strings.Contains(err.Error(), "blocked") {
+			t.Errorf("fetchSource(%q) error = %v, want it to say the destination is blocked", raw, err)
+		}
+	}
+}
+
+// Loopback is blocked by the same check — the hermetic tests reach 127.0.0.1
+// only because they exempt it explicitly.
+func TestFetchSourceRejectsALoopbackDestination(t *testing.T) {
+	_, err := fetchSource(context.Background(), "https://127.0.0.1:9/list.txt")
+
+	if err == nil {
+		t.Fatal("fetchSource accepted a loopback source, want it rejected")
+	}
+	if !strings.Contains(err.Error(), "blocked") {
+		t.Errorf("error = %v, want it to say the destination is blocked", err)
+	}
+}
+
+// A redirect is a fresh destination and gets the same checks. The first hop is
+// an exempted loopback server; the target is not exempted, so following it
+// would be the bug.
+func TestFetchSourceDoesNotFollowARedirectToAPrivateDestination(t *testing.T) {
+	allowLoopbackSources(t)
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://10.0.0.1/list.txt", http.StatusFound)
+	}))
+	t.Cleanup(redirect.Close)
+
+	text, err := fetchSource(context.Background(), redirect.URL+"/list.txt")
+
+	if err == nil {
+		t.Fatalf("followed the redirect and returned %q, want an error", text)
+	}
+	if !strings.Contains(err.Error(), "blocked") {
+		t.Errorf("error = %v, want it to say the destination is blocked", err)
+	}
+}
+
 // Each source gets its own deadline, so one hanging upstream cannot hold the
 // request open.
 func TestFetchSourcesBoundsEachSourceWithATimeout(t *testing.T) {
+	allowLoopbackSources(t)
 	original := sourceTimeout
 	sourceTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { sourceTimeout = original })

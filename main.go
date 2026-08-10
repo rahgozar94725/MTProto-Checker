@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -96,6 +97,83 @@ func cachedLookupHost(host string) ([]net.IP, error) {
 // const only so fetchsources_test.go can shorten it; nothing in production
 // writes it.
 var sourceTimeout = 30 * time.Second
+
+// The SSRF policy for /fetch-sources. The server fetches arbitrary URLs on
+// request and HOST=0.0.0.0 is a supported deployment with no auth and no
+// origin check, so an unchecked source URL is a request-forgery primitive
+// pointed at whatever the server can reach and the client cannot.
+//
+// allowPlainHTTPSources and allowedSourceIP are the two test seams and nothing
+// else — false and nil in production, written only by fetchsources_test.go,
+// because every hermetic upstream is plain HTTP on 127.0.0.1, which is exactly
+// what the policy exists to reject. allowedSourceIP exempts individual
+// addresses rather than switching the destination check off, so a test that
+// exempts loopback still proves 10.0.0.1 is blocked.
+var (
+	allowPlainHTTPSources bool
+	allowedSourceIP       func(net.IP) bool
+)
+
+// blockedSourceIP reports whether ip is a destination no source fetch may
+// reach: the machine itself, the link-local range that carries cloud metadata
+// services, and the private networks behind it.
+func blockedSourceIP(ip net.IP) bool {
+	if allowedSourceIP != nil && allowedSourceIP(ip) {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast()
+}
+
+// checkSourceURL enforces the scheme allowlist. Destinations are not checked
+// here — a hostname says nothing about where it resolves — but at dial time,
+// in sourceClient.
+func checkSourceURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if u.Scheme == "https" || (u.Scheme == "http" && allowPlainHTTPSources) {
+		return nil
+	}
+	return errors.Errorf("scheme %q is not allowed; https only", u.Scheme)
+}
+
+// sourceClient is the only client /fetch-sources uses. Its Control hook runs
+// after DNS resolution and before the connection, which is both the
+// resolve-then-check the policy calls for — no window between deciding and
+// connecting, so a rebinding answer cannot slip through — and the redirect
+// check: every hop dials again, so a redirect into a blocked range never
+// connects. CheckRedirect covers the other half of a hop, its scheme.
+var sourceClient = &http.Client{
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return checkSourceURL(req.URL.String())
+	},
+	Transport: &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+			Control: func(network, address string, _ syscall.RawConn) error {
+				host, _, err := net.SplitHostPort(address)
+				if err != nil {
+					return err
+				}
+				ip := net.ParseIP(host)
+				if ip == nil {
+					return errors.Errorf("blocked unresolved destination %q", address)
+				}
+				if blockedSourceIP(ip) {
+					return errors.Errorf("blocked destination %s", ip)
+				}
+				return nil
+			},
+		}).DialContext,
+	},
+}
 
 type FetchSourcesRequest struct {
 	URLs []string `json:"urls"`
@@ -302,9 +380,13 @@ func openBrowser(url string) {
 // is read through a LimitReader one byte past the cap, so an oversized source
 // is cut off mid-read and rejected instead of being buffered whole.
 //
-// No scheme allowlist and no private-destination check yet — that is Task 12,
-// and this endpoint does not ship without it.
+// The URL clears the scheme allowlist before anything is dialled, and
+// sourceClient rejects the destination itself after resolution.
 func fetchSource(ctx context.Context, url string) (string, error) {
+	if err := checkSourceURL(url); err != nil {
+		return "", err
+	}
+
 	reqCtx, cancel := context.WithTimeout(ctx, sourceTimeout)
 	defer cancel()
 
@@ -312,7 +394,7 @@ func fetchSource(ctx context.Context, url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := sourceClient.Do(req)
 	if err != nil {
 		return "", err
 	}
