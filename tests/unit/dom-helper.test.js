@@ -98,6 +98,21 @@ test('stubs the browser APIs jsdom lacks', async () => {
 
         new app.window.AudioContext();
         assert.equal(app.recorded.audioContexts, 1);
+
+        // jsdom implements neither alert nor confirm; unstubbed, confirm answers undefined,
+        // which reads as cancel and would silently disable every guarded action.
+        assert.equal(app.window.confirm('sure?'), true);
+        assert.deepEqual(app.recorded.confirms, ['sure?']);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('confirm answers what the mount was told to answer', async () => {
+    const app = await mountApp({ confirm: false });
+    try {
+        assert.equal(app.window.confirm('sure?'), false);
+        assert.deepEqual(app.recorded.confirms, ['sure?'], 'a cancelled question is still recorded');
     } finally {
         app.cleanup();
     }

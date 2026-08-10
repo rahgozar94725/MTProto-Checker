@@ -59,7 +59,8 @@ export const translations = {
         addSourceBtn: "افزودن",
         restoreSourcesBtn: "بازگردانی پیش‌فرض‌ها",
         removeSource: "حذف منبع",
-        sourceUrlPlaceholder: "نشانی لیست پروکسی (https://…)"
+        sourceUrlPlaceholder: "نشانی لیست پروکسی (https://…)",
+        confirmRestore: "بازگردانی پیش‌فرض‌ها منابع افزوده‌شده و همهٔ امتیازها را پاک می‌کند. ادامه می‌دهید؟"
     },
     en: {
         title: "MTProto Checker",
@@ -118,7 +119,8 @@ export const translations = {
         addSourceBtn: "Add",
         restoreSourcesBtn: "Restore defaults",
         removeSource: "Remove source",
-        sourceUrlPlaceholder: "Proxy list URL (https://…)"
+        sourceUrlPlaceholder: "Proxy list URL (https://…)",
+        confirmRestore: "Restoring the defaults removes your added sources and clears every score. Continue?"
     },
     ru: {
         title: "MTProto Checker",
@@ -177,7 +179,8 @@ export const translations = {
         addSourceBtn: "Добавить",
         restoreSourcesBtn: "Сбросить к умолчаниям",
         removeSource: "Удалить источник",
-        sourceUrlPlaceholder: "Ссылка на список прокси (https://…)"
+        sourceUrlPlaceholder: "Ссылка на список прокси (https://…)",
+        confirmRestore: "Сброс к умолчаниям удалит добавленные источники и обнулит все оценки. Продолжить?"
     },
     zh: {
         title: "MTProto Checker",
@@ -236,7 +239,8 @@ export const translations = {
         addSourceBtn: "添加",
         restoreSourcesBtn: "恢复默认",
         removeSource: "删除来源",
-        sourceUrlPlaceholder: "代理列表网址（https://…）"
+        sourceUrlPlaceholder: "代理列表网址（https://…）",
+        confirmRestore: "恢复默认将删除你添加的来源并清除所有评分。是否继续？"
     }
 };
 

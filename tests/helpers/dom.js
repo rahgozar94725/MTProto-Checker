@@ -22,7 +22,7 @@ const APP_URL = new URL('../../public/js/app.js', import.meta.url);
 // FileReader accept.
 const GLOBAL_KEYS = [
     'window', 'document', 'navigator', 'localStorage', 'sessionStorage',
-    'requestAnimationFrame', 'cancelAnimationFrame', 'fetch', 'alert',
+    'requestAnimationFrame', 'cancelAnimationFrame', 'fetch', 'alert', 'confirm',
     'Node', 'Element', 'HTMLElement', 'Event', 'CustomEvent', 'MouseEvent',
     'Blob', 'File', 'FileReader', 'DataTransfer', 'URL', 'AudioContext',
     'getComputedStyle', 'setTimeout',
@@ -36,6 +36,11 @@ let mountCounter = 0;
  * @param {object}   [options]
  * @param {object}   [options.storage]     localStorage entries seeded before app.js boots.
  * @param {Function} [options.fetch]       replaces the default fetch stub, which refuses to dial out.
+ * @param {boolean}  [options.confirm]     what window.confirm answers; defaults to true, so a test
+ *                                         that is not about the prompt goes straight through. Every
+ *                                         question asked is recorded either way. jsdom does not
+ *                                         implement confirm at all -- unstubbed it logs
+ *                                         "Not implemented" and returns undefined, i.e. cancel.
  * @param {string}   [options.url]         document URL; defaults to the dev server address.
  * @param {Function} [options.beforeBoot]  called with { window } immediately before app.js is
  *                                         imported, for anything that has to be wrong *during*
@@ -43,9 +48,10 @@ let mountCounter = 0;
  *                                         element. Breaking it post-mount tests nothing.
  * @returns {Promise<{window, document, cleanup, flushFrames, pendingFrames, recorded}>}
  */
-export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://127.0.0.1:3000/', beforeBoot } = {}) {
+export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://127.0.0.1:3000/', beforeBoot, confirm: confirmAnswer = true } = {}) {
     const recorded = {
         alerts: [],
+        confirms: [],
         clipboard: [],
         opened: [],
         objectURLs: [],
@@ -123,6 +129,10 @@ export async function mountApp({ storage = {}, fetch: fetchImpl, url = 'http://1
     Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
 
     window.alert = (message) => { recorded.alerts.push(String(message)); };
+    window.confirm = (message) => {
+        recorded.confirms.push(String(message));
+        return confirmAnswer;
+    };
     window.open = (target) => { recorded.opened.push(String(target)); return null; };
 
     let objectURLCounter = 0;

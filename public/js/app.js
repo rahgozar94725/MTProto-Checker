@@ -767,9 +767,12 @@ function addSourceFromInput() {
 }
 
 // Restores the built-ins *and* drops every score with them: this is the reset, not a
-// re-enable. Logged because it is the one control here whose effect is not visible in the row
-// the user clicked.
+// re-enable. The only irreversible control on the page -- scores accumulate over scans and
+// nothing else can rebuild them -- so it is the only one that asks. Logged as well, because it
+// is also the one control whose effect is not visible in the row the user clicked.
 function restoreSources() {
+    if (!confirm(translations[currentLang].confirmRestore)) return;
+
     applySources(defaultSources());
     log('Source list restored to the built-in defaults.');
 }
