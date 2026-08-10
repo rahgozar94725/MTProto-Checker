@@ -527,6 +527,12 @@ var allowedHosts map[string]struct{}
 // All three loopback spellings are listed regardless of which one addr used: the
 // browser is opened at the bound address, but a user typing localhost into the
 // bar reaches the same server and must not be refused.
+//
+// The bound address is listed too, and that is not covered by the three: 127/8 is
+// loopback in its entirety, so HOST=127.0.0.2 binds, passes shouldOpenBrowser and
+// has a browser opened at it -- and without its own entry every POST from that
+// page 403s, with the map non-empty so the WARNING line stays silent as well.
+// Lowercased because sameOriginOnly lowercases the Host it compares.
 func hostAllowlist(addr string) map[string]struct{} {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -535,7 +541,8 @@ func hostAllowlist(addr string) map[string]struct{} {
 	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
 		return nil
 	}
-	allowed := make(map[string]struct{}, 3)
+	allowed := make(map[string]struct{}, 4)
+	allowed[strings.ToLower(net.JoinHostPort(host, port))] = struct{}{}
 	for _, h := range []string{"127.0.0.1", "localhost", "[::1]"} {
 		allowed[h+":"+port] = struct{}{}
 	}
