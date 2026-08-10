@@ -10,9 +10,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { parseSnapshot, splitFragment } from '../../public/js/snapshot.js';
+import { parseSnapshot, resolveSourceUrls, splitFragment } from '../../public/js/snapshot.js';
 import { parseProxyList, proxyKey } from '../../public/js/parse.js';
-import { DEFAULT_SOURCE_OWNERS } from '../../public/js/sources.js';
+import { DEFAULT_SOURCES, DEFAULT_SOURCE_OWNERS } from '../../public/js/sources.js';
 import { buildSnapshot } from '../../scripts/build-snapshot.mjs';
 
 const fixture = n =>
@@ -217,6 +217,46 @@ test('parseSnapshot called with nothing yields empty structures', () => {
     assert.deepEqual(sources, []);
     assert.deepEqual(links, []);
     assert.equal(attribution.size, 0);
+});
+
+// The header is not evidence. `seen` was moved off it because a branch that can write the lines
+// writes the header too; the two consumers that map an id back to a *url* — dropDisabledSources
+// and rateBySourceId — were left trusting it. Relabelling source 0 as a url the model has never
+// heard of empties dropDisabledSources' id set, so every link of a source the user explicitly
+// disabled loads and gets scanned.
+test('resolveSourceUrls answers a known id from this build, not from the header', () => {
+    const lying = ['evil/relabelled.txt', 'also/evil.txt'];
+
+    assert.deepEqual(resolveSourceUrls(lying).slice(0, 2), DEFAULT_SOURCES.slice(0, 2));
+});
+
+test('resolveSourceUrls covers every id this build knows, header or no header', () => {
+    assert.deepEqual(resolveSourceUrls(parseSnapshot(SNAPSHOT).sources), DEFAULT_SOURCES);
+    assert.deepEqual(resolveSourceUrls([]), DEFAULT_SOURCES);
+    assert.deepEqual(resolveSourceUrls(), DEFAULT_SOURCES);
+});
+
+// Past this build's list the header is the only answer there is: a client older than the
+// snapshot it just fetched still has to be able to name the sources it does not carry.
+test('resolveSourceUrls keeps a header slot past the end of this build\'s list', () => {
+    const header = [];
+    header[DEFAULT_SOURCES.length] = 'newer/source.txt';
+
+    const resolved = resolveSourceUrls(header);
+    assert.equal(resolved[DEFAULT_SOURCES.length], 'newer/source.txt');
+    assert.deepEqual(resolved.slice(0, DEFAULT_SOURCES.length), DEFAULT_SOURCES);
+});
+
+// rateBySourceId maps over this array and hands each entry to shortUrl(), which throws on
+// undefined. Array.prototype.map skips a hole and does not skip an own property holding
+// undefined, so copying a sparse header across slot by slot would freeze the page on Start.
+test('resolveSourceUrls leaves an undeclared slot as a hole rather than an undefined entry', () => {
+    const header = [];
+    header[DEFAULT_SOURCES.length + 3] = 'far/out.txt';
+
+    const resolved = resolveSourceUrls(header);
+    assert.equal(DEFAULT_SOURCES.length in resolved, false, 'a gap must stay a hole');
+    resolved.forEach(url => assert.equal(typeof url, 'string'));
 });
 
 test('a real build-snapshot output round-trips to the same proxies it was built from', () => {

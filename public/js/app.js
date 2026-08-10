@@ -10,7 +10,7 @@ import {
     showToast as paintToast,
 } from './render.js';
 import { createScanState } from './state.js';
-import { parseSnapshot, splitFragment } from './snapshot.js';
+import { parseSnapshot, resolveSourceUrls, splitFragment } from './snapshot.js';
 import {
     addSource,
     defaultSources,
@@ -718,9 +718,11 @@ async function loadSnapshot() {
         // Replaced rather than merged: the file just fetched is the whole truth about which
         // sources published what. A failed load keeps the previous map instead.
         state.snapshotAttribution = snapshot.attribution;
-        // The header is what joins a `src=` id to a source url, so scoring and scan ordering
-        // are both dead until a snapshot has been loaded at least once.
-        snapshotSourceUrls = snapshot.sources;
+        // What joins a `src=` id to a source url, so scoring and scan ordering are both dead
+        // until a snapshot has been loaded at least once. Resolved rather than read off the
+        // header: an id this build knows is a position in DEFAULT_SOURCES, and the file does
+        // not get to relabel it — see resolveSourceUrls.
+        snapshotSourceUrls = resolveSourceUrls(snapshot.sources);
         snapshotGeneratedAt = snapshot.generatedAt;
         renderSnapshotMeta();
     }
