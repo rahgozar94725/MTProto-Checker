@@ -7,6 +7,8 @@
 // between them and script execution is textContent.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { mountApp } from '../helpers/dom.js';
 import { pingClass } from '../../public/js/format.js';
 import {
@@ -16,6 +18,7 @@ import {
     setResultsView,
     showToast,
     resultCell,
+    TOAST_MS,
 } from '../../public/js/render.js';
 import { createScanState } from '../../public/js/state.js';
 
@@ -219,6 +222,59 @@ test('showToast writes the message as text and marks success or error', async ()
         assert.equal(toast.textContent, '<b>boom</b>');
         assert.equal(toast.querySelectorAll('b').length, 0, 'toast text must not be parsed as markup');
         assert.equal(toast.className, 'toast show error');
+    } finally {
+        app.cleanup();
+    }
+});
+
+// #toast is an aria-live region, and `visibility: hidden` / `display: none` take a subtree out
+// of the accessibility tree — so the region would only ever appear already populated, which is
+// the case screen readers handle least reliably. It has to stay rendered and empty at rest,
+// hidden by opacity alone. jsdom does not cascade, so this reads the stylesheet: the rule is a
+// property of the CSS, not of any element's computed style at a moment in time.
+test('the toast is hidden without leaving the accessibility tree', async () => {
+    const css = readFileSync(fileURLToPath(new URL('../../public/css/components.css', import.meta.url)), 'utf8');
+    const base = /^\.toast \{([^}]*)\}/m.exec(css);
+
+    assert.ok(base, 'components.css no longer has a .toast rule');
+    assert.doesNotMatch(base[1], /visibility\s*:\s*hidden/);
+    assert.doesNotMatch(base[1], /display\s*:\s*none/);
+    assert.match(base[1], /opacity\s*:\s*0/, 'something still has to hide it');
+});
+
+// The callback clears the text as well as the class now, so a stale timer would wipe the message
+// of a toast raised while the previous one was still up -- and empty the live region while the
+// second message is the current one, which is the opposite of what it is for.
+test('a second toast is not cut short by the first one timing out', async () => {
+    const app = await mountApp();
+    try {
+        const toast = app.document.getElementById('toast');
+
+        showToast(app.document, 'first');
+        await new Promise(resolve => setTimeout(resolve, TOAST_MS - 100));
+        showToast(app.document, 'second');
+        // Past when the first toast's timer would have fired, well before the second's.
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        assert.equal(toast.textContent, 'second');
+        assert.ok(toast.classList.contains('show'));
+    } finally {
+        app.cleanup();
+    }
+});
+
+// Outwaited on purpose rather than left to whichever sibling test happens to run long enough:
+// these are gated lines, and a 100% line gate that depends on wall-clock is not a gate.
+test('the toast hides itself and empties the live region when its time is up', async () => {
+    const app = await mountApp();
+    try {
+        const toast = app.document.getElementById('toast');
+
+        showToast(app.document, 'done');
+        await new Promise(resolve => setTimeout(resolve, TOAST_MS + 100));
+
+        assert.equal(toast.textContent, '');
+        assert.equal(toast.className, 'toast success');
     } finally {
         app.cleanup();
     }

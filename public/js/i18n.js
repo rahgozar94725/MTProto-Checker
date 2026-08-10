@@ -60,6 +60,7 @@ export const translations = {
         restoreSourcesBtn: "بازگردانی پیش‌فرض‌ها",
         removeSource: "حذف منبع",
         sourceUrlPlaceholder: "نشانی لیست پروکسی (https://…)",
+        toastSourceInvalid: "نشانی نامعتبر است. باید با ‎https://‎ یا ‎http://‎ شروع شود.",
         confirmRestore: "بازگردانی پیش‌فرض‌ها منابع افزوده‌شده و همهٔ امتیازها را پاک می‌کند. ادامه می‌دهید؟"
     },
     en: {
@@ -120,6 +121,7 @@ export const translations = {
         restoreSourcesBtn: "Restore defaults",
         removeSource: "Remove source",
         sourceUrlPlaceholder: "Proxy list URL (https://…)",
+        toastSourceInvalid: "That is not a usable URL — it has to start with https:// or http://.",
         confirmRestore: "Restoring the defaults removes your added sources and clears every score. Continue?"
     },
     ru: {
@@ -180,6 +182,7 @@ export const translations = {
         restoreSourcesBtn: "Сбросить к умолчаниям",
         removeSource: "Удалить источник",
         sourceUrlPlaceholder: "Ссылка на список прокси (https://…)",
+        toastSourceInvalid: "Это не подходящая ссылка — она должна начинаться с https:// или http://.",
         confirmRestore: "Сброс к умолчаниям удалит добавленные источники и обнулит все оценки. Продолжить?"
     },
     zh: {
@@ -240,6 +243,7 @@ export const translations = {
         restoreSourcesBtn: "恢复默认",
         removeSource: "删除来源",
         sourceUrlPlaceholder: "代理列表网址（https://…）",
+        toastSourceInvalid: "网址无效 — 必须以 https:// 或 http:// 开头。",
         confirmRestore: "恢复默认将删除你添加的来源并清除所有评分。是否继续？"
     }
 };

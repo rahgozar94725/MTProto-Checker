@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { parseSnapshot } from '../../public/js/snapshot.js';
+import { parseSnapshot, splitFragment } from '../../public/js/snapshot.js';
 import { parseProxyList, proxyKey } from '../../public/js/parse.js';
 import { buildSnapshot } from '../../scripts/build-snapshot.mjs';
 
@@ -30,6 +30,19 @@ const SNAPSHOT = [
     `${SHARED_LINK}#seen=3;src=0,1,2`,
     '',
 ].join('\n');
+
+// The rule three files share: scripts/build-snapshot.mjs when it collects the corpus,
+// parseSnapshot below, and app.js when it loads a user's own list. The trailing-space trim is
+// what keeps `…secret=ee00 # comment` from yielding a secret the server only rescues through
+// decodeSecret's junk-trim path.
+test('splitFragment cuts at the first # and trims what is left', () => {
+    assert.deepEqual(splitFragment(`${SHARED_LINK} # MTProto EU (100)`),
+        { link: SHARED_LINK, fragment: ' MTProto EU (100)' });
+    assert.deepEqual(splitFragment(`${SHARED_LINK}#seen=1;src=0#more`),
+        { link: SHARED_LINK, fragment: 'seen=1;src=0#more' });
+    assert.deepEqual(splitFragment(`${SHARED_LINK}  `), { link: SHARED_LINK, fragment: '' });
+    assert.deepEqual(splitFragment('#all comment'), { link: '', fragment: 'all comment' });
+});
 
 test('parseSnapshot reads the generation timestamp off the header', () => {
     assert.equal(parseSnapshot(SNAPSHOT).generatedAt, '2026-08-09T12:00:00.000Z');
@@ -73,6 +86,63 @@ test('parseSnapshot drops a line whose fragment is not the snapshot grammar', ()
 
     assert.deepEqual(links, [SHARED_LINK], 'the link survives the source-side comment');
     assert.equal(attribution.size, 0);
+});
+
+// `sources[id] = url` on a sparse array, with `id` read straight off the file: an unbounded
+// index lets a compromised snapshot branch hand every later reader — rateBySourceId() on the
+// way into a scan, above all — a four-billion-slot walk. The page loads and then freezes on
+// Start. Four digits is well past the 17 real sources, and an id that overruns it fails the
+// match outright, which is the same as any other comment line.
+test('parseSnapshot ignores a source id too long to be one', () => {
+    const { sources } = parseSnapshot(`# 4294967294 evil/list.txt\n${SHARED_LINK}`);
+
+    assert.equal(sources.length, 0, 'a 10-digit index would allocate a 4-billion-slot array');
+});
+
+test('parseSnapshot still reads a source id at the edge of the bound', () => {
+    assert.equal(parseSnapshot('# 9999 far/out.txt').sources[9999], 'far/out.txt');
+});
+
+// `seen=` past Number's range reads back as Infinity, and orderForScan subtracts two of them:
+// `Infinity - Infinity` is NaN, which makes a sort comparator inconsistent rather than merely
+// wrong. Overrunning the bound drops the attribution and keeps the link, exactly as an
+// undeclared `src=` id does.
+// The id list is bounded in length as well as per id: one line can otherwise declare hundreds
+// of thousands of ids inside the 1 MiB per-source cap, and every one of them is walked again by
+// bestRate(), dropDisabledSources() and tally().
+test('parseSnapshot ignores a fragment declaring more sources than exist', () => {
+    const many = Array.from({ length: 40 }, (_, i) => i % 10).join(',');
+    const { links, attribution } = parseSnapshot(`${SHARED_LINK}#seen=40;src=${many}`);
+
+    assert.deepEqual(links, [SHARED_LINK]);
+    assert.equal(attribution.size, 0);
+});
+
+test('parseSnapshot still reads an id list as long as the source list could plausibly be', () => {
+    const ids = Array.from({ length: 32 }, (_, i) => i);
+    const { attribution } = parseSnapshot(`${SHARED_LINK}#seen=32;src=${ids.join(',')}`);
+
+    assert.deepEqual(attribution.get(SHARED_KEY).srcs, ids);
+});
+
+// `seen` is the first scan-order key, so an inflated one pins a proxy to the head of every
+// user's next scan. The writer always emits it equal to srcs.length, so a line where they
+// disagree was not written by the builder — and bounding the digits alone would not have
+// caught `seen=999999;src=0`.
+test('parseSnapshot ignores a fragment whose seen count its own id list contradicts', () => {
+    const { links, attribution } = parseSnapshot(`${SHARED_LINK}#seen=999999;src=0`);
+
+    assert.deepEqual(links, [SHARED_LINK]);
+    assert.equal(attribution.size, 0);
+});
+
+test('parseSnapshot ignores a fragment whose numbers are out of scale', () => {
+    for (const fragment of [`seen=${'9'.repeat(400)};src=0`, 'seen=1;src=99999']) {
+        const { links, attribution } = parseSnapshot(`${SHARED_LINK}#${fragment}`);
+
+        assert.deepEqual(links, [SHARED_LINK], fragment);
+        assert.equal(attribution.size, 0, fragment);
+    }
 });
 
 test('parseSnapshot is total on a body of garbage', () => {

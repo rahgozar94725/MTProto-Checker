@@ -120,9 +120,32 @@ export function setResultsView(doc, view) {
     doc.getElementById('viewTextBtn').setAttribute('aria-pressed', String(view === 'text'));
 }
 
+// How long a toast stays up. Exported because the test that covers the callback below has to
+// outwait it — jsdom runs real timers, and a callback nothing waits for is a coverage line whose
+// execution depends on how long some other test happens to take.
+export const TOAST_MS = 3000;
+
+// #toast is an aria-live region, which is why it is hidden with opacity rather than
+// `visibility`/`display` (see components.css): rendered and empty at rest, so writing the message
+// is a text change the region can announce, instead of a populated region appearing from nowhere.
+// Clearing on the way out is the same rule from the other side — a region left holding the last
+// message can re-announce it the next time anything about it changes.
+//
+// The pending timer is cancelled first: without that, a toast raised 2.9s after another has its
+// text wiped 100ms later by the first one's callback -- and the region is emptied while the
+// second message is the current one, which is exactly backwards for a live region.
+//
+// The handle rides the element rather than a module variable, so this file keeps its rule of
+// reading no module state: two mounts in one Node process share this module, and a shared
+// variable would let one document's toast cancel the other's.
 export function showToast(doc, message, isError = false) {
     const toast = doc.getElementById('toast');
-    toast.innerText = message;
     toast.className = 'toast show ' + (isError ? 'error' : 'success');
-    setTimeout(() => { toast.classList.remove('show'); }, 3000);
+    toast.innerText = message;
+
+    clearTimeout(Number(toast.dataset.toastTimer));
+    toast.dataset.toastTimer = String(setTimeout(() => {
+        toast.classList.remove('show');
+        toast.innerText = '';
+    }, TOAST_MS));
 }

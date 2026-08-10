@@ -215,7 +215,7 @@ func TestFetchSourcesRejectsAnOversizedSourceWithoutBufferingIt(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(10 * raceTimeoutFactor * time.Second):
 		t.Fatal("upstream handler never returned — the read was not cut off")
 	}
 	mu.Lock()
@@ -339,7 +339,7 @@ func TestFetchSourcesBoundsEachSourceWithATimeout(t *testing.T) {
 	if rec.Body.Len() != 0 {
 		t.Errorf("body = %q, want empty — the hanging source contributes nothing", rec.Body.String())
 	}
-	if elapsed > 5*time.Second {
+	if elapsed > 5*raceTimeoutFactor*time.Second {
 		t.Errorf("took %v — the per-source timeout did not bound the fetch", elapsed)
 	}
 }

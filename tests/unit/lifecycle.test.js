@@ -10,10 +10,17 @@
 // tell a pause from a completed scan.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { mountApp } from '../helpers/dom.js';
 import { body, progressFrame, doneFrame } from '../helpers/sse.js';
 import { translations, interpolate } from '../../public/js/i18n.js';
-import { DEFAULT_SOURCES, SNAPSHOT_SOURCE_URL, shortUrl } from '../../public/js/sources.js';
+import {
+    DEFAULT_SOURCES,
+    MAX_SOURCES_PER_REQUEST,
+    SNAPSHOT_SOURCE_URL,
+    shortUrl,
+} from '../../public/js/sources.js';
 
 const fa = translations.fa;
 const encoder = new TextEncoder();
@@ -490,6 +497,86 @@ test('a user source that fails does not cost the snapshot that succeeded', async
     }
 });
 
+// A third-party list really does carry `…&secret=ee00# MTProto EU (100)`, and parseLink keeps
+// the whole line as proxy.original — which is what the clipboard and every export read. The
+// snapshot builder has always stripped; this is the other side of the same rule.
+test('a comment on a user-source line never reaches the textarea', async () => {
+    const app = await mountApp({
+        fetch: respondToLoad({
+            live: SNAPSHOT_TEXT,
+            userSources: `${USER_LINK}# MTProto EU (100)`,
+        }),
+        storage: { sources: STORED_USER_SOURCE },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'),
+            [...SNAPSHOT_LINKS, USER_LINK]);
+    } finally {
+        app.cleanup();
+    }
+});
+
+// The server answers 413 past MAX_SOURCES_PER_REQUEST urls, so one POST for a 21-source list
+// would drop the whole step with nothing but `USER SOURCES: HTTP 413` in the drawer.
+const manySources = n => Array.from({ length: n }, (_, i) => `https://example.invalid/list-${i}.txt`);
+const postedUrls = app =>
+    app.recorded.fetches.filter(f => f.url === '/fetch-sources').map(f => JSON.parse(f.init.body).urls);
+
+test('more user sources than fit in one request are fetched in batches', async () => {
+    const urls = manySources(MAX_SOURCES_PER_REQUEST + 1);
+    const app = await mountApp({
+        fetch: respondToLoad({ live: SNAPSHOT_TEXT, userSources: USER_LINK }),
+        storage: { sources: JSON.stringify(urls.map(url => ({ url, enabled: true }))) },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the load');
+
+        assert.deepEqual(postedUrls(app), [
+            [SNAPSHOT_SOURCE_URL],
+            urls.slice(0, MAX_SOURCES_PER_REQUEST),
+            urls.slice(MAX_SOURCES_PER_REQUEST),
+        ]);
+        // Both batches answered with the same link, so the dedupe still has to hold.
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'),
+            [...SNAPSHOT_LINKS, USER_LINK]);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a batch that fails costs its own sources and no others', async () => {
+    const urls = manySources(MAX_SOURCES_PER_REQUEST + 1);
+    const app = await mountApp({
+        // The first batch fails, the second answers: the failure must not take the survivor
+        // with it, and the count in the log has to say how many sources actually answered.
+        fetch: async (url, init) => {
+            if (String(url) !== '/fetch-sources') return textResponse(null);
+            const posted = JSON.parse(init.body).urls;
+            if (posted.includes(SNAPSHOT_SOURCE_URL)) return textResponse(SNAPSHOT_TEXT);
+            return textResponse(posted.length === MAX_SOURCES_PER_REQUEST ? null : USER_LINK);
+        },
+        storage: { sources: JSON.stringify(urls.map(url => ({ url, enabled: true }))) },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the load');
+
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'),
+            [...SNAPSHOT_LINKS, USER_LINK]);
+
+        const lines = [...app.document.querySelectorAll('#console div')].map(d => d.textContent);
+        assert.equal(lines.filter(l => l.includes('USER SOURCES')).length, 1);
+        assert.ok(lines.some(l => l.includes('Loaded 1 links from 1 of your own sources.')),
+            lines.join('\n'));
+    } finally {
+        app.cleanup();
+    }
+});
+
 test('a disabled built-in keeps its exclusive links out of the load', async () => {
     const app = await mountApp({
         fetch: respondToLoad({ live: SNAPSHOT_TEXT }),
@@ -628,6 +715,38 @@ test('a failed snapshot fetch toasts, logs an error, and leaves the textarea unt
         const errors = [...app.document.querySelectorAll('#console .error-log')];
         assert.equal(errors.length, 1, 'one error line, not a stack of them');
         assert.match(errors[0].textContent, /SNAPSHOT ERROR/);
+    } finally {
+        app.cleanup();
+    }
+});
+
+// The paste, the file picker and the drop target all write to the same textarea, and third-party
+// lists really do carry `…&secret=ee00# MTProto EU (100)`. parseLink keeps the whole line as
+// proxy.original, which is what every artifact reads -- so without the strip the user copies
+// back `tg://…# MTProto EU (100) # Ping: 90ms`.
+test('a comment pasted on a link never reaches the table, the clipboard or an export', async () => {
+    const pasted = link('198.51.100.77', 443, 'ee9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c');
+    const stream = body([
+        progress({ server: '198.51.100.77', secret: 'ee9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c', ok: true, ping: 90, completed: 1, total: 1, working: 1 }),
+        doneFrame({ completed: 1 }),
+    ]);
+    const app = await mountApp({ fetch: respondWith(stream) });
+    try {
+        paste(app, `${pasted}# MTProto EU (100)`);
+        click(app, 'startBtn');
+        await waitFor(() => isIdle(app), 'the scan to finish');
+        app.flushFrames();
+
+        assert.equal(rows(app).length, 1);
+        assert.equal(app.document.getElementById('outputProxies').value, `${pasted} # Ping: 90ms`);
+
+        click(app, 'exportTxtBtn');
+        const txt = await app.recorded.objectURLs[0].blob.text();
+        assert.ok(!txt.includes('MTProto EU'), txt);
+
+        app.document.querySelector('#resultsBody .rowcopy').click();
+        await tick();
+        assert.equal(app.recorded.clipboard[0], `${pasted} # Ping: 90ms`);
     } finally {
         app.cleanup();
     }
@@ -951,6 +1070,25 @@ test('adding a blank or duplicate url changes nothing', async () => {
     }
 });
 
+// The one rejection that gets a toast rather than being ignored: a blank and a duplicate are
+// ordinary typing, an unusable url is a mistake the user is about to correct — so the field
+// keeps its text and nothing is added.
+test('an unusable url is refused with a toast and left in the field', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        const before = sourceUrls(app);
+
+        typeUrl(app, 'file:///etc/passwd');
+        click(app, 'addSourceBtn');
+
+        assert.deepEqual(sourceUrls(app), before);
+        assert.equal(toastText(app), fa.toastSourceInvalid);
+        assert.equal(app.document.getElementById('sourceUrlInput').value, 'file:///etc/passwd');
+    } finally {
+        app.cleanup();
+    }
+});
+
 test('only a user-added source offers a remove button, and it removes', async () => {
     const app = await mountApp({ fetch: respondWith(''), storage: { sources: STORED_USER_SOURCE } });
     try {
@@ -1026,6 +1164,65 @@ test('the source list follows a language change', async () => {
         langSelect.dispatchEvent(new app.window.Event('change'));
 
         assert.deepEqual(sourceDetails(app), DEFAULT_SOURCES.map(() => translations.ru.sourceUnscored));
+    } finally {
+        app.cleanup();
+    }
+});
+
+// The add-source row is one flex line of input and two buttons, with no room for the visible
+// <label for> the SOCKS5 fields below it carry — so the placeholder is the field's only name,
+// and a screen reader only hears it through aria-label. Both have to follow the language.
+test('the source url field keeps an accessible name in every locale', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        const field = app.document.getElementById('sourceUrlInput');
+        assert.equal(field.getAttribute('aria-label'), fa.sourceUrlPlaceholder);
+
+        const langSelect = app.document.getElementById('langSelect');
+        langSelect.value = 'zh';
+        langSelect.dispatchEvent(new app.window.Event('change'));
+
+        assert.equal(field.getAttribute('aria-label'), translations.zh.sourceUrlPlaceholder);
+        assert.equal(field.placeholder, translations.zh.sourceUrlPlaceholder);
+    } finally {
+        app.cleanup();
+    }
+});
+
+// setLanguage() overwrites the markup's value at boot, so the test above would pass over any
+// static text at all -- and app.js is a module whose top-level throw skips that call, leaving
+// whatever index.html carries as the field's only name.
+test('the aria-label baked into index.html is the fa string, not an approximation of it', () => {
+    const html = readFileSync(fileURLToPath(new URL('../../public/index.html', import.meta.url)), 'utf8');
+    const declared = /id="sourceUrlInput"[^>]*aria-label="([^"]*)"/s.exec(html);
+
+    assert.ok(declared, 'the field has no aria-label in the markup');
+    assert.equal(declared[1], fa.sourceUrlPlaceholder);
+});
+
+// Every outcome the page reports without moving focus lands in the toast -- including
+// toastSourceInvalid, which exists so the user learns why Add appeared to do nothing.
+test('the toast is a polite live region', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        const toast = app.document.getElementById('toast');
+
+        assert.equal(toast.getAttribute('role'), 'status');
+        assert.equal(toast.getAttribute('aria-live'), 'polite');
+    } finally {
+        app.cleanup();
+    }
+});
+
+// A load replaces this line without moving focus or changing anything else on the page, so
+// without the live region a screen-reader user is never told which list they just got.
+test('the snapshot date line is a polite live region', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        const meta = app.document.getElementById('snapshotMeta');
+
+        assert.equal(meta.getAttribute('role'), 'status');
+        assert.equal(meta.getAttribute('aria-live'), 'polite');
     } finally {
         app.cleanup();
     }

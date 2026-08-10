@@ -124,12 +124,20 @@
                 <input type="file" id="fileInput" accept=".txt,.csv,.list" style="display:none">
             </label>
         </div>
-        <div class="snapshot-meta" id="snapshotMeta"></div>
+        <!-- Written by renderSnapshotMeta() after a load, so a screen reader learns which list
+             the button just fetched without having to go looking for the line. changeLanguage()
+             re-renders it too, so a locale change re-announces the date; accepted, since that is
+             also a deliberate user action whose effect on this line is what it says. -->
+        <div class="snapshot-meta" id="snapshotMeta" role="status" aria-live="polite"></div>
         <details class="sources-drawer" id="sourcesDrawer">
             <summary data-i18n="sourcesTitle">منابع لیست</summary>
             <div class="sources-list" id="sourcesList"></div>
             <div class="sources-add">
-                <input type="text" id="sourceUrlInput" autocomplete="off" spellcheck="false" placeholder="https://…">
+                <!-- aria-label rather than the <label for> the SOCKS5 fields below use: this
+                     row is a single flex line of input + two buttons, and a visible label would
+                     have to wrap it. setLanguage() rewrites both attributes together. -->
+                <input type="text" id="sourceUrlInput" autocomplete="off" spellcheck="false"
+                       placeholder="https://…" aria-label="نشانی لیست پروکسی (https://…)">
                 <button type="button" id="addSourceBtn" data-i18n="addSourceBtn">افزودن</button>
                 <button type="button" id="restoreSourcesBtn" data-i18n="restoreSourcesBtn">بازگردانی پیش‌فرض‌ها</button>
             </div>
@@ -200,7 +208,13 @@
     </details>
 </div>
 
-<div id="toast" class="toast"></div>
+<!-- Where the page answers a button press without moving focus — a finished scan, a failed load,
+     a refused source url. Without the live region a screen-reader user pressing Add on a url the
+     app rejects hears nothing at all, which is indistinguishable from a dead button. Note this
+     covers the toast only. Plenty the page reports is still visual-only — every activity-log
+     line and the drawer opening itself, #inputSummary, the stat tiles, the results table — and
+     none of that is closed by this element. -->
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="/js/app.js"></script>
 </body>

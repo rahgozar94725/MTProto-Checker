@@ -853,8 +853,13 @@ button:active:not(:disabled),
 .ok-log { color: var(--success); }
 
 /* ===== Toast ===== */
+/* Hidden with opacity and pointer-events, never with visibility or display: #toast is an
+   aria-live region, and a visibility:hidden subtree is outside the accessibility tree — so the
+   region would only ever appear already populated, which is the case screen readers handle
+   least reliably. Rendered-and-empty at rest, it announces the text write itself. Visually
+   identical: opacity was already doing the fade. */
 .toast {
-    visibility: hidden;
+    pointer-events: none;
     min-width: 250px;
     background-color: var(--toast-bg);
     color: #fff;
@@ -872,7 +877,7 @@ button:active:not(:disabled),
 }
 
 .toast.show {
-    visibility: visible;
+    pointer-events: auto;
     opacity: 1;
     bottom: 50px;
 }
