@@ -226,6 +226,37 @@ func TestFetchSourcesRejectsAnOversizedSourceWithoutBufferingIt(t *testing.T) {
 	}
 }
 
+// maxSourceBytes, byteBudget and maxRequestSourceBytes are all enforced on the
+// response *body*. Headers are read and parsed into the header map before the
+// handler sees a byte of it, so without MaxResponseHeaderBytes a source costs
+// the stdlib default of 10 MiB of headers against a 4 MiB per-request budget
+// that charged 2 bytes for it — 20 sources × 4 requests in flight, and the
+// ceiling is three orders off what the design reasons about.
+func TestFetchSourcesRejectsASourceWithOversizedHeaders(t *testing.T) {
+	allowLoopbackSources(t)
+
+	// 200 × 8 KiB is ~1.6 MiB of headers: far past the cap, far under the
+	// stdlib default that would let it through.
+	heavy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		padding := strings.Repeat("A", 8*1024)
+		for i := 0; i < 200; i++ {
+			w.Header().Set("X-Pad-"+strconv.Itoa(i), padding)
+		}
+		fmt.Fprint(w, "tg://proxy?server=192.0.2.5\n")
+	}))
+	t.Cleanup(heavy.Close)
+	ok := textSource(t, "tg://proxy?server=192.0.2.4\n")
+
+	rec := fetchSources(t, heavy.URL, ok)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got, want := rec.Body.String(), "tg://proxy?server=192.0.2.4\n"; got != want {
+		t.Errorf("body = %q, want %q — the source must contribute nothing once its headers pass the cap", got, want)
+	}
+}
+
 // https only on the direct path. Plain HTTP is allowed only through SOCKS5,
 // which is a separate client — see the SOCKS5 tests below.
 func TestFetchSourceRejectsPlainHTTP(t *testing.T) {
