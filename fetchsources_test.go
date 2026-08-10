@@ -793,6 +793,39 @@ func TestSOCKS5RedirectMayNotChangeScheme(t *testing.T) {
 	}
 }
 
+// The same half of a hop on the other client. The dialer's Control hook sees an
+// address and not a URL, so CheckRedirect is the only thing on the direct leg
+// that looks at a hop's scheme: without it an https source answers 302
+// Location: http://… and its body crosses the server's own network in the
+// clear, which is a list-rewriting position over a URL the user believes is
+// TLS-protected. TestFetchSourceDoesNotFollowARedirectToAPrivateDestination
+// does not cover this — that one is killed by the Control hook, and it runs
+// under allowLoopbackSources, which sets the very seam that neuters the arm
+// here.
+//
+// So allowPlainHTTPSources is deliberately left at its production false, and
+// read off the client's own CheckRedirect for the same reason the SOCKS5 test
+// is: reaching it end to end would need a real TLS upstream.
+func TestDirectRedirectMayNotDowngradeTheScheme(t *testing.T) {
+	if allowPlainHTTPSources {
+		t.Fatal("test bug: this test is meaningless with the plain-HTTP seam open")
+	}
+
+	hop := func(from, to string) error {
+		via := httptest.NewRequest(http.MethodGet, from, nil)
+		return sourceClient.CheckRedirect(httptest.NewRequest(http.MethodGet, to, nil), []*http.Request{via})
+	}
+
+	if err := hop("https://example.com/list.txt", "http://example.com/list.txt"); err == nil {
+		t.Error("https -> http redirect accepted, want it rejected — the direct leg is https only")
+	} else if !strings.Contains(err.Error(), "scheme") {
+		t.Errorf("error = %v, want it to name the scheme", err)
+	}
+	if err := hop("https://example.com/a.txt", "https://example.com/b.txt"); err != nil {
+		t.Errorf("https -> https redirect = %v, want it allowed", err)
+	}
+}
+
 // A scheme the SOCKS5 leg rejects too is rejected on both attempts, and neither
 // one dials: checkSourceURL is the first thing fetchVia does, before the proxy
 // is reached. This is what makes predicting which failures are worth retrying
