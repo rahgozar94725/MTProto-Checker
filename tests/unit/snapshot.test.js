@@ -136,6 +136,30 @@ test('parseSnapshot ignores a fragment whose seen count its own id list contradi
     assert.equal(attribution.size, 0);
 });
 
+// Repeating one id is the other half of the same attack, and the digit bound does not touch it:
+// `src=0,0,…,0` declares 32 publishers that are all the same source, and comparing `seen` against
+// the raw list length accepts it. Counting distinct ids is what makes the check mean what its
+// name says — how many sources published this proxy.
+test('parseSnapshot ignores a fragment inflating seen by repeating one source id', () => {
+    const ids = Array.from({ length: 32 }, () => 0);
+    const { links, attribution } = parseSnapshot(`${SHARED_LINK}#seen=32;src=${ids.join(',')}`);
+
+    assert.deepEqual(links, [SHARED_LINK]);
+    assert.equal(attribution.size, 0);
+});
+
+test('parseSnapshot ignores a two-id fragment that names one source twice', () => {
+    assert.equal(parseSnapshot(`${SHARED_LINK}#seen=2;src=0,0`).attribution.size, 0);
+});
+
+// The one line dedupe accepts that the raw comparison rejected. It is honest — one distinct
+// source, declared as one — and the builder never emits it, so this pins the direction rather
+// than blessing a format.
+test('parseSnapshot accepts a repeated id whose seen count matches the distinct one', () => {
+    assert.deepEqual(parseSnapshot(`${SHARED_LINK}#seen=1;src=0,0`).attribution.get(SHARED_KEY),
+        { seen: 1, srcs: [0] });
+});
+
 test('parseSnapshot ignores a fragment whose numbers are out of scale', () => {
     for (const fragment of [`seen=${'9'.repeat(400)};src=0`, 'seen=1;src=99999']) {
         const { links, attribution } = parseSnapshot(`${SHARED_LINK}#${fragment}`);

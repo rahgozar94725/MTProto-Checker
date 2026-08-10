@@ -90,7 +90,10 @@ export function parseSnapshot(text = '') {
 
         const meta = FRAGMENT_RE.exec(fragment);
         if (meta) {
-            const srcs = meta[2].split(',').map(Number);
+            // Distinct, because the comparison below is the whole guard and the raw list length
+            // is not what `seen` means. `src=0,0,…,0` is one source named 32 times, and counting
+            // it as 32 publishers is the same lie as an inflated `seen=` written on its own.
+            const srcs = [...new Set(meta[2].split(',').map(Number))];
             // `seen` is how many sources published the proxy, and the writer emits exactly
             // `srcs.length` — so a line where they disagree was not written by the builder. It
             // is the *first* scan-order key (orderForScan sorts on it before source score), so
