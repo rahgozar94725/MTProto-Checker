@@ -27,6 +27,7 @@ import (
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/dcs"
+	"golang.org/x/net/proxy"
 )
 
 //go:embed public
@@ -128,20 +129,92 @@ func blockedSourceIP(ip net.IP) bool {
 
 // checkSourceURL enforces the scheme allowlist. Destinations are not checked
 // here — a hostname says nothing about where it resolves — but at dial time,
-// in sourceClient.
-func checkSourceURL(raw string) error {
+// in sourceClient. Plain HTTP is allowed only when the fetch is routed through
+// a SOCKS5 proxy, which is the one case where the bytes do not cross the
+// server's own network in the clear.
+func checkSourceURL(raw string, viaSOCKS5 bool) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err
 	}
-	if u.Scheme == "https" || (u.Scheme == "http" && allowPlainHTTPSources) {
+	if u.Scheme == "https" || (u.Scheme == "http" && (viaSOCKS5 || allowPlainHTTPSources)) {
 		return nil
 	}
-	return errors.Errorf("scheme %q is not allowed; https only", u.Scheme)
+	return errors.Errorf("scheme %q is not allowed; https only, or http through SOCKS5", u.Scheme)
 }
 
-// sourceClient is the only client /fetch-sources uses. Its Control hook runs
-// after DNS resolution and before the connection, which is both the
+// checkSOCKS5Destination applies the destination policy to a fetch that will be
+// routed through a proxy. There is no dial hook to hang it on there — the proxy
+// resolves the name and makes the connection — so it runs before the proxy is
+// dialled: a literal address is judged directly, and a name is judged whenever
+// this machine can resolve it. A name only the proxy can resolve is left to the
+// proxy, which is the case the feature exists for.
+func checkSOCKS5Destination(address string) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if blockedSourceIP(ip) {
+			return errors.Errorf("blocked destination %s", ip)
+		}
+		return nil
+	}
+	ips, err := cachedLookupHost(host)
+	if err != nil {
+		return nil
+	}
+	for _, ip := range ips {
+		if blockedSourceIP(ip) {
+			return errors.Errorf("blocked destination %s", ip)
+		}
+	}
+	return nil
+}
+
+// socks5Client builds the client for one request's SOCKS5 retries. The dialer
+// that reaches the proxy itself carries no destination check: a proxy on
+// 127.0.0.1 is the ordinary case (Tor, a local tunnel), so blocking loopback
+// there would block the feature. What the proxy is asked to reach is checked
+// instead, and before the proxy is dialled — including on every redirect hop,
+// since each one dials again.
+func socks5Client(cfg *SOCKS5Config) (*http.Client, error) {
+	var auth *proxy.Auth
+	if cfg.User != "" || cfg.Pass != "" {
+		auth = &proxy.Auth{User: cfg.User, Password: cfg.Pass}
+	}
+	dialer, err := proxy.SOCKS5("tcp", cfg.Addr, auth, &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ctxDialer, ok := dialer.(proxy.ContextDialer)
+	if !ok {
+		return nil, errors.New("socks5 dialer does not honour contexts")
+	}
+
+	return &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return errors.New("stopped after 10 redirects")
+			}
+			return checkSourceURL(req.URL.String(), true)
+		},
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				if err := checkSOCKS5Destination(address); err != nil {
+					return nil, err
+				}
+				return ctxDialer.DialContext(ctx, network, address)
+			},
+		},
+	}, nil
+}
+
+// sourceClient is the direct client, tried first for every source. Its Control
+// hook runs after DNS resolution and before the connection, which is both the
 // resolve-then-check the policy calls for — no window between deciding and
 // connecting, so a rebinding answer cannot slip through — and the redirect
 // check: every hop dials again, so a redirect into a blocked range never
@@ -151,7 +224,7 @@ var sourceClient = &http.Client{
 		if len(via) >= 10 {
 			return errors.New("stopped after 10 redirects")
 		}
-		return checkSourceURL(req.URL.String())
+		return checkSourceURL(req.URL.String(), false)
 	},
 	Transport: &http.Transport{
 		DialContext: (&net.Dialer{
@@ -175,8 +248,17 @@ var sourceClient = &http.Client{
 	},
 }
 
+// SOCKS5Config is the optional proxy a /fetch-sources request may carry. An
+// absent config — or an empty address — means direct-only.
+type SOCKS5Config struct {
+	Addr string `json:"addr"`
+	User string `json:"user,omitempty"`
+	Pass string `json:"pass,omitempty"`
+}
+
 type FetchSourcesRequest struct {
-	URLs []string `json:"urls"`
+	URLs   []string      `json:"urls"`
+	SOCKS5 *SOCKS5Config `json:"socks5,omitempty"`
 }
 
 type CheckRequest struct {
@@ -376,14 +458,29 @@ func openBrowser(url string) {
 	go func() { _ = cmd.Wait() }()
 }
 
-// fetchSource retrieves one source's raw text under its own deadline. The body
-// is read through a LimitReader one byte past the cap, so an oversized source
-// is cut off mid-read and rejected instead of being buffered whole.
+// fetchSource retrieves one source's raw text. The direct client is tried
+// first; when it fails and the request configured a proxy, the same URL is
+// retried through it — which is also the only way a plain-HTTP source is ever
+// fetched. Each attempt carries its own deadline, so one source can cost up to
+// two sourceTimeouts.
+func fetchSource(ctx context.Context, socks *http.Client, url string) (string, error) {
+	text, err := fetchVia(ctx, sourceClient, url, false)
+	if err == nil || socks == nil {
+		return text, err
+	}
+	log.Printf("SOURCE DIRECT FAIL %s: %v — retrying through SOCKS5", url, err)
+	return fetchVia(ctx, socks, url, true)
+}
+
+// fetchVia performs one attempt under its own deadline. The body is read
+// through a LimitReader one byte past the cap, so an oversized source is cut
+// off mid-read and rejected instead of being buffered whole.
 //
-// The URL clears the scheme allowlist before anything is dialled, and
-// sourceClient rejects the destination itself after resolution.
-func fetchSource(ctx context.Context, url string) (string, error) {
-	if err := checkSourceURL(url); err != nil {
+// The URL clears the scheme allowlist before anything is dialled, and the
+// client rejects the destination itself: after resolution for sourceClient, and
+// before the proxy is dialled for a SOCKS5 client.
+func fetchVia(ctx context.Context, client *http.Client, url string, viaSOCKS5 bool) (string, error) {
+	if err := checkSourceURL(url, viaSOCKS5); err != nil {
 		return "", err
 	}
 
@@ -394,7 +491,7 @@ func fetchSource(ctx context.Context, url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resp, err := sourceClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -776,6 +873,20 @@ func newMux() *http.ServeMux {
 			return
 		}
 
+		// One proxy client for the whole request, shared by every source's
+		// retry. An empty address is the same as no proxy at all.
+		var socks *http.Client
+		if req.SOCKS5 != nil && req.SOCKS5.Addr != "" {
+			client, err := socks5Client(req.SOCKS5)
+			if err != nil {
+				jsonResponse(w, http.StatusBadRequest,
+					map[string]string{"error": fmt.Sprintf("invalid socks5 proxy: %v", err)})
+				return
+			}
+			socks = client
+			defer socks.CloseIdleConnections()
+		}
+
 		// Fetched concurrently, concatenated by index: the output order is the
 		// request order regardless of which source answers first. A failed
 		// source contributes nothing and aborts nothing.
@@ -785,7 +896,7 @@ func newMux() *http.ServeMux {
 			wg.Add(1)
 			go func(idx int, url string) {
 				defer wg.Done()
-				text, err := fetchSource(r.Context(), url)
+				text, err := fetchSource(r.Context(), socks, url)
 				if err != nil {
 					log.Printf("SOURCE FAIL %s: %v", url, err)
 					return
