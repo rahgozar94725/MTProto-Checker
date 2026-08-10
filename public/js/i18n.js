@@ -50,7 +50,12 @@ export const translations = {
         toastSnapshotFailed: "⛔ بارگذاری لیست داخلی ناموفق بود",
         sourcesTitle: "منابع لیست",
         sourceScore: "{n} لینک · {w} سالم ({rate}٪)",
-        sourceUnscored: "هنوز بررسی نشده"
+        sourceUnscored: "هنوز بررسی نشده",
+        socks5Title: "پروکسی SOCKS5 (اختیاری)",
+        socks5AddrLabel: "آدرس",
+        socks5UserLabel: "نام کاربری",
+        socks5PassLabel: "رمز عبور",
+        socks5Warning: "⚠️ رمز عبور به‌صورت متن ساده در حافظهٔ مرورگر (localStorage) ذخیره می‌شود."
     },
     en: {
         title: "MTProto Checker",
@@ -100,7 +105,12 @@ export const translations = {
         toastSnapshotFailed: "⛔ Could not load the built-in list",
         sourcesTitle: "List sources",
         sourceScore: "{n} links · {w} working ({rate} %)",
-        sourceUnscored: "not scanned yet"
+        sourceUnscored: "not scanned yet",
+        socks5Title: "SOCKS5 proxy (optional)",
+        socks5AddrLabel: "Address",
+        socks5UserLabel: "Username",
+        socks5PassLabel: "Password",
+        socks5Warning: "⚠️ The password is stored in your browser's localStorage in plaintext."
     },
     ru: {
         title: "MTProto Checker",
@@ -150,7 +160,12 @@ export const translations = {
         toastSnapshotFailed: "⛔ Не удалось загрузить встроенный список",
         sourcesTitle: "Источники списка",
         sourceScore: "{n} ссылок · {w} рабочих ({rate} %)",
-        sourceUnscored: "ещё не проверялся"
+        sourceUnscored: "ещё не проверялся",
+        socks5Title: "Прокси SOCKS5 (необязательно)",
+        socks5AddrLabel: "Адрес",
+        socks5UserLabel: "Имя пользователя",
+        socks5PassLabel: "Пароль",
+        socks5Warning: "⚠️ Пароль хранится в localStorage браузера в открытом виде."
     },
     zh: {
         title: "MTProto Checker",
@@ -200,7 +215,12 @@ export const translations = {
         toastSnapshotFailed: "⛔ 无法加载内置列表",
         sourcesTitle: "列表来源",
         sourceScore: "{n} 条链接 · {w} 可用（{rate}%）",
-        sourceUnscored: "尚未扫描"
+        sourceUnscored: "尚未扫描",
+        socks5Title: "SOCKS5 代理（可选）",
+        socks5AddrLabel: "地址",
+        socks5UserLabel: "用户名",
+        socks5PassLabel: "密码",
+        socks5Warning: "⚠️ 密码以明文形式存储在浏览器的 localStorage 中。"
     }
 };
 

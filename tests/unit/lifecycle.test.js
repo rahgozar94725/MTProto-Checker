@@ -490,6 +490,87 @@ test('a user source that fails does not cost the snapshot that succeeded', async
     }
 });
 
+// --- the SOCKS5 proxy the server fetches through -------------------------------------
+
+function typeInto(app, id, value) {
+    const field = app.document.getElementById(id);
+    field.value = value;
+    field.dispatchEvent(new app.window.Event('change'));
+}
+
+const postedTo = (app, url) => app.recorded.fetches.filter(f => f.url === url).map(f => JSON.parse(f.init.body));
+
+test('a SOCKS5 address rides every fetch-sources request and persists', async () => {
+    const app = await mountApp({
+        fetch: respondToLoad({ live: SNAPSHOT_TEXT, userSources: USER_LINK }),
+        storage: { sources: STORED_USER_SOURCE },
+    });
+    try {
+        typeInto(app, 'socks5Addr', '127.0.0.1:9050');
+        typeInto(app, 'socks5User', 'tor');
+        typeInto(app, 'socks5Pass', 'hunter2');
+
+        assert.equal(app.window.localStorage.getItem('socks5Addr'), '127.0.0.1:9050');
+        assert.equal(app.window.localStorage.getItem('socks5User'), 'tor');
+        assert.equal(app.window.localStorage.getItem('socks5Pass'), 'hunter2');
+
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        // Both steps, not just the snapshot: a user's own source is on the same network.
+        const proxy = { addr: '127.0.0.1:9050', user: 'tor', pass: 'hunter2' };
+        assert.deepEqual(postedTo(app, '/fetch-sources').map(b => b.socks5), [proxy, proxy]);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('an empty SOCKS5 address leaves the request carrying no proxy at all', async () => {
+    const app = await mountApp({ fetch: respondToLoad({ live: SNAPSHOT_TEXT }) });
+    try {
+        // A username with no address is the half-filled form: the server reads an empty addr as
+        // direct-only, so sending the rest of it would be noise.
+        typeInto(app, 'socks5User', 'tor');
+
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+
+        const [body] = postedTo(app, '/fetch-sources');
+        assert.ok(!('socks5' in body), 'no proxy configured means no socks5 key');
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('stored SOCKS5 settings come back in the fields on the next boot', async () => {
+    const app = await mountApp({
+        fetch: respondWith(''),
+        storage: { socks5Addr: '10.0.0.1:1080', socks5User: 'u', socks5Pass: 'p' },
+    });
+    try {
+        assert.equal(app.document.getElementById('socks5Addr').value, '10.0.0.1:1080');
+        assert.equal(app.document.getElementById('socks5User').value, 'u');
+        assert.equal(app.document.getElementById('socks5Pass').value, 'p');
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('the plaintext-password warning is on the page and follows a language change', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        const warning = app.document.getElementById('socks5Warning');
+        assert.equal(warning.textContent, fa.socks5Warning);
+
+        const langSelect = app.document.getElementById('langSelect');
+        langSelect.value = 'zh';
+        langSelect.dispatchEvent(new app.window.Event('change'));
+        assert.equal(warning.textContent, translations.zh.socks5Warning);
+    } finally {
+        app.cleanup();
+    }
+});
+
 test('a failed snapshot fetch toasts, logs an error, and leaves the textarea untouched', async () => {
     const app = await mountApp({ fetch: respondToSnapshot(null) });
     try {

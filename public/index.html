@@ -129,6 +129,18 @@
             <summary data-i18n="sourcesTitle">منابع لیست</summary>
             <div class="sources-list" id="sourcesList"></div>
         </details>
+        <details class="sources-drawer" id="socks5Drawer">
+            <summary data-i18n="socks5Title">پروکسی SOCKS5</summary>
+            <div class="socks-fields">
+                <label for="socks5Addr" data-i18n="socks5AddrLabel">آدرس</label>
+                <input type="text" id="socks5Addr" placeholder="127.0.0.1:9050" autocomplete="off" spellcheck="false">
+                <label for="socks5User" data-i18n="socks5UserLabel">نام کاربری</label>
+                <input type="text" id="socks5User" autocomplete="off" spellcheck="false">
+                <label for="socks5Pass" data-i18n="socks5PassLabel">رمز عبور</label>
+                <input type="password" id="socks5Pass" autocomplete="off">
+            </div>
+            <p class="socks-warning" id="socks5Warning" data-i18n="socks5Warning">رمز عبور به‌صورت متن ساده در حافظه مرورگر ذخیره می‌شود.</p>
+        </details>
     </div>
 
     <div class="results" id="resultsPanel" data-view="table">

@@ -214,6 +214,26 @@ test.describe('every migrated control still fires', () => {
         expect(errors).toEqual([]);
     });
 
+    test('#socks5Addr persists across a reload and warns about the stored password', async ({ page }) => {
+        const errors = collectErrors(page);
+        await page.goto('/');
+
+        await page.locator('#socks5Drawer summary').click();
+        await expect(page.locator('#socks5Warning')).toHaveText(T.socks5Warning);
+
+        await page.locator('#socks5Addr').fill('127.0.0.1:9050');
+        await page.locator('#socks5Pass').fill('hunter2');
+        // The change event is what persists it, and filling a field does not fire one.
+        await page.locator('#socks5Addr').blur();
+        await page.locator('#socks5Pass').blur();
+
+        await page.reload();
+        await expect(page.locator('#socks5Addr')).toHaveValue('127.0.0.1:9050');
+        await expect(page.locator('#socks5Pass')).toHaveValue('hunter2');
+
+        expect(errors).toEqual([]);
+    });
+
     test('#viewTableBtn and #viewTextBtn flip the results view both ways', async ({ page }) => {
         const errors = collectErrors(page);
         await page.goto('/');
