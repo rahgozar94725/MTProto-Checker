@@ -1,0 +1,91 @@
+{
+    "note": "Per-source link counts the drift guard in build-snapshot.mjs compares against. Bump deliberately, never automatically.",
+    "generatedAt": "2026-08-10T13:13:17.095Z",
+    "sources": [
+        {
+            "src": 0,
+            "url": "iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt",
+            "unique": 302
+        },
+        {
+            "src": 1,
+            "url": "Argh94/Proxy-List/main/MTProto.txt",
+            "unique": 208
+        },
+        {
+            "src": 2,
+            "url": "Kira00011/MTProto/main/all_proxies.txt",
+            "unique": 247
+        },
+        {
+            "src": 3,
+            "url": "SoliSpirit/mtproto/master/all_proxies.txt",
+            "unique": 230
+        },
+        {
+            "src": 4,
+            "url": "Therealwh/MTPproxyLIST/refs/heads/main/verified/proxy_all_verified.txt",
+            "unique": 190
+        },
+        {
+            "src": 5,
+            "url": "kort0881/telegram-proxy-collector/main/proxy_all.txt",
+            "unique": 190
+        },
+        {
+            "src": 6,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no1.txt",
+            "unique": 15
+        },
+        {
+            "src": 7,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no2.txt",
+            "unique": 15
+        },
+        {
+            "src": 8,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no3.txt",
+            "unique": 14
+        },
+        {
+            "src": 9,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no4.txt",
+            "unique": 15
+        },
+        {
+            "src": 10,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no5.txt",
+            "unique": 14
+        },
+        {
+            "src": 11,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no6.txt",
+            "unique": 15
+        },
+        {
+            "src": 12,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no7.txt",
+            "unique": 14
+        },
+        {
+            "src": 13,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no8.txt",
+            "unique": 14
+        },
+        {
+            "src": 14,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no9.txt",
+            "unique": 15
+        },
+        {
+            "src": 15,
+            "url": "V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no10.txt",
+            "unique": 14
+        },
+        {
+            "src": 16,
+            "url": "FLAT447/v2ray-lists/refs/heads/main/blacklist.txt",
+            "unique": 377
+        }
+    ]
+}

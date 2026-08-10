@@ -16,33 +16,41 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     name: Build and publish the snapshot
     runs-on: ubuntu-latest
+    # Scoped to the one job that pushes rather than declared at the workflow level, so a
+    # step added to a future job does not inherit write access it was never meant to have.
+    permissions:
+      contents: write
     steps:
+      # Every action here is pinned by SHA with its version in the trailing comment, for
+      # the reason release.yml already pins its reusable workflow: this job holds a
+      # contents: write token, and a `v4` tag is repointable by whoever owns the action.
+      # A retagged checkout would run arbitrary code next to that token.
+      #
       # The push below uses an explicit token from a repository this checkout does not
       # own, so the checkout's own credentials are dead weight.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: '22'
 
       # No `npm ci`: the script imports public/js/parse.js and node builtins, nothing else.
-      # It exits non-zero if any source is non-200 or yields no parseable link, which is
-      # the intended failure — a silently smaller snapshot is worse than a red run.
+      # It exits non-zero if any source is non-200, yields no parseable link, or has drifted
+      # past the band in scripts/snapshot-baseline.json — all three are the intended failure,
+      # since a silently wrong snapshot is worse than a red run. It writes snapshot.txt.sha256
+      # beside its output; release.yml verifies that before it embeds the file.
       - name: Build the snapshot
         run: node scripts/build-snapshot.mjs "$RUNNER_TEMP/snapshot.txt"
 
       # Built in a throwaway repository rather than an orphan branch of this checkout, so
       # the published branch cannot pick up a stray working-tree file: `git add` names the
-      # one file, and a fresh history means every push is exactly one commit.
+      # two files, and a fresh history means every push is exactly one commit.
       - name: Force-push to the snapshot branch
         working-directory: ${{ runner.temp }}
         env:
@@ -52,6 +60,6 @@ jobs:
           git init -q -b snapshot
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add snapshot.txt
+          git add snapshot.txt snapshot.txt.sha256
           git commit -q -m "chore(snapshot): rebuild $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" snapshot

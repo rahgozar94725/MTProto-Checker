@@ -31,23 +31,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # Pinned by SHA for the same reason as the reusable workflow below.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: 'go.mod'
 
-      # The orphan `snapshot` branch holds one file, rebuilt nightly. It has to land in
-      # public/data/ before the compiler runs, because //go:embed reads the working tree —
+      # The orphan `snapshot` branch holds the nightly list and its checksum. It has to land
+      # in public/data/ before the compiler runs, because //go:embed reads the working tree —
       # a release built without this step ships the committed placeholder instead.
       # --fail is what turns a deleted branch or a renamed file into a red job rather than
       # a silently placeholder-shipping release; without it curl saves the 404 body and
       # exits 0. Nothing is committed back: the overwrite lives in the runner's checkout.
+      #
+      # The checksum is fetched and verified before the file is accepted, so what ships is
+      # attested to be what the nightly job produced rather than whatever answered the
+      # request. It is not a signature and does not make the upstream sources trustworthy —
+      # the drift guard in build-snapshot.mjs is what covers those.
       - name: Fetch the nightly snapshot
         run: |
-          curl --fail --silent --show-error --location \
-            -o public/data/snapshot.txt \
-            "https://raw.githubusercontent.com/${{ github.repository }}/snapshot/snapshot.txt"
+          set -euo pipefail
+          base="https://raw.githubusercontent.com/${{ github.repository }}/snapshot"
+          curl --fail --silent --show-error --location -o "$RUNNER_TEMP/snapshot.txt" "$base/snapshot.txt"
+          curl --fail --silent --show-error --location -o "$RUNNER_TEMP/snapshot.txt.sha256" "$base/snapshot.txt.sha256"
+          ( cd "$RUNNER_TEMP" && sha256sum -c snapshot.txt.sha256 )
+          cp "$RUNNER_TEMP/snapshot.txt" public/data/snapshot.txt
 
       - name: Build
         run: |
@@ -59,7 +68,7 @@ jobs:
           CGO_ENABLED: 0
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: binary-${{ matrix.os }}-${{ matrix.arch }}
           path: mtproto-checker-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}

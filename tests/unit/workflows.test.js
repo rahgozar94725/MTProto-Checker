@@ -37,16 +37,46 @@ test('snapshot.yml runs on a schedule and by hand, never on push', () => {
     assert.doesNotMatch(on, /^\s+push:/m, 'a push trigger would rebuild the snapshot on every commit');
 });
 
-test('snapshot.yml asks for contents: write and nothing else', () => {
+// Scoped to the job that pushes, not to the workflow: a second job added later would
+// otherwise inherit write access to the repository without anyone deciding it should.
+test('snapshot.yml asks for contents: write on the job, and nothing else anywhere', () => {
     const text = workflow('snapshot.yml');
-    // Indented lines only — `\s` would swallow the blank line and run into `jobs:`.
-    const permissions = text.match(/^permissions:\n((?:[ \t]+\S.*\n)+)/m);
 
-    assert.ok(permissions, 'snapshot.yml declares no permissions block');
+    assert.doesNotMatch(text, /^permissions:/m,
+        'a workflow-level permissions block hands write access to every future job');
+
+    const permissions = text.match(/^ {4}permissions:\n((?: {6}\S.*\n)+)/m);
+    assert.ok(permissions, 'the build job declares no permissions block');
     assert.deepEqual(
         permissions[1].trim().split('\n').map(l => l.trim()),
         ['contents: write']
     );
+});
+
+// The nightly job holds a contents: write token, so an action resolved through a movable
+// tag is arbitrary code running next to it — the same argument release.yml already makes
+// for the reusable workflow it pins. Applied to all three workflows so the rule cannot rot
+// back in through the low-privilege one.
+test('every workflow pins its actions by SHA', () => {
+    for (const name of ['snapshot.yml', 'release.yml', 'test.yml']) {
+        const text = workflow(name);
+        // Both spellings: a step's `- uses:` and a job's bare `uses:`.
+        const uses = [...text.matchAll(/^[ \t]+(?:- )?uses: (\S+)/gm)].map(m => m[1]);
+
+        assert.ok(uses.length > 0, `${name} uses no actions at all`);
+        for (const ref of uses) {
+            assert.match(ref, /@[0-9a-f]{40}$/, `${name} resolves ${ref} through a movable ref`);
+        }
+    }
+});
+
+// Both files or neither: release.yml refuses to build without the checksum, so publishing
+// only the snapshot would red every release rather than degrade quietly.
+test('snapshot.yml publishes the snapshot and its checksum together', () => {
+    const text = workflow('snapshot.yml');
+
+    assert.match(text, /^\s+git add snapshot\.txt snapshot\.txt\.sha256$/m,
+        'the checksum has to be pushed alongside the file it attests');
 });
 
 // `//go:embed public` reads the working tree at compile time, so the only window in which
@@ -63,8 +93,27 @@ test('release.yml bakes the nightly snapshot in before it builds', () => {
     assert.ok(fetchAt < buildAt, '//go:embed reads public/ at compile time — the fetch has to come first');
     assert.match(text, /curl[^\n]*--fail/,
         'without --fail curl saves the 404 body over the snapshot and exits 0');
-    assert.match(text, /raw\.githubusercontent\.com\/\$\{\{ github\.repository \}\}\/snapshot\/snapshot\.txt/,
-        'the snapshot branch holds the file at its root');
+    assert.match(text, /raw\.githubusercontent\.com\/\$\{\{ github\.repository \}\}\/snapshot/,
+        'the snapshot branch holds the files at its root');
+    assert.match(text, /\$base\/snapshot\.txt"/, 'the snapshot itself is still fetched');
+});
+
+// The checksum is what makes the embedded list attested to be the one the nightly job
+// produced. Verified before the copy into public/data/, so a mismatch reds the release
+// instead of shipping. `set -euo pipefail` is what makes a failed sha256sum -c stop the
+// step at all — without it the script continues to the copy and the build succeeds.
+test('release.yml verifies the snapshot checksum before it embeds the file', () => {
+    const text = workflow('release.yml');
+    const verifyAt = text.indexOf('sha256sum -c');
+    const copyAt = text.indexOf('public/data/snapshot.txt');
+    const buildAt = text.indexOf('go build');
+
+    assert.notEqual(verifyAt, -1, 'nothing checks that the fetched snapshot is the published one');
+    assert.ok(verifyAt < copyAt, 'the checksum has to be verified before the file is accepted');
+    assert.ok(copyAt < buildAt, '//go:embed reads public/ at compile time');
+    assert.match(text, /^\s+set -euo pipefail$/m,
+        'without -e a failed sha256sum -c is ignored and the release ships anyway');
+    assert.match(text, /snapshot\.txt\.sha256/, 'the checksum file is never fetched');
 });
 
 // A moving ref here would let the workflow repository repoint this project at code it
