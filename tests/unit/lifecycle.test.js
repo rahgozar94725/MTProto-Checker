@@ -896,6 +896,99 @@ test('a disabled source keeps its exclusive proxies out of the scan entirely', a
     }
 });
 
+// --- adding, removing and restoring sources -------------------------------------------
+
+function typeUrl(app, url) {
+    app.document.getElementById('sourceUrlInput').value = url;
+}
+
+const sourceUrls = app => sourceRows(app).map(row => row.querySelector('input').dataset.url);
+const removeButtons = app => sourceRows(app).map(row => row.querySelector('.source-remove'));
+
+test('adding a source appends it, clears the field and persists it', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        typeUrl(app, `  ${USER_SOURCE}  `);
+        click(app, 'addSourceBtn');
+
+        assert.deepEqual(sourceUrls(app).slice(-1), [USER_SOURCE], 'user sources land after the built-ins');
+        assert.equal(sourceRows(app).length, DEFAULT_SOURCES.length + 1);
+        assert.equal(app.document.getElementById('sourceUrlInput').value, '');
+        assert.equal(storedSources(app).find(s => s.url === USER_SOURCE).enabled, true);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('Enter in the url field adds the source too', async () => {
+    const app = await mountApp({ fetch: respondWith('') });
+    try {
+        typeUrl(app, USER_SOURCE);
+        app.document.getElementById('sourceUrlInput')
+            .dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+        assert.deepEqual(sourceUrls(app).slice(-1), [USER_SOURCE]);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('adding a blank or duplicate url changes nothing', async () => {
+    const app = await mountApp({ fetch: respondWith(''), storage: { sources: STORED_USER_SOURCE } });
+    try {
+        const before = sourceUrls(app);
+
+        typeUrl(app, '   ');
+        click(app, 'addSourceBtn');
+        typeUrl(app, USER_SOURCE);
+        click(app, 'addSourceBtn');
+        typeUrl(app, DEFAULT_SOURCES[0]);
+        click(app, 'addSourceBtn');
+
+        assert.deepEqual(sourceUrls(app), before);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('only a user-added source offers a remove button, and it removes', async () => {
+    const app = await mountApp({ fetch: respondWith(''), storage: { sources: STORED_USER_SOURCE } });
+    try {
+        assert.deepEqual(removeButtons(app).map(Boolean),
+            [...DEFAULT_SOURCES.map(() => false), true]);
+
+        removeButtons(app).at(-1).click();
+        await tick();
+
+        assert.equal(sourceRows(app).length, DEFAULT_SOURCES.length);
+        assert.ok(!storedSources(app).some(s => s.url === USER_SOURCE));
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('restoring the defaults drops user sources and clears every score', async () => {
+    const app = await mountApp({
+        fetch: respondWith(''),
+        storage: {
+            sources: JSON.stringify([
+                { url: DEFAULT_SOURCES[0], enabled: false, score: { linksProvided: 10, linksWorking: 5, lastScan: 'once' } },
+                { url: USER_SOURCE, enabled: true },
+            ]),
+        },
+    });
+    try {
+        click(app, 'restoreSourcesBtn');
+
+        assert.deepEqual(sourceUrls(app), DEFAULT_SOURCES);
+        assert.deepEqual(sourceBoxes(app).map(box => box.checked), DEFAULT_SOURCES.map(() => true));
+        assert.deepEqual(sourceDetails(app), DEFAULT_SOURCES.map(() => fa.sourceUnscored));
+        assert.deepEqual(storedSources(app), DEFAULT_SOURCES.map(url => ({ url, enabled: true, addedByUser: false })));
+    } finally {
+        app.cleanup();
+    }
+});
+
 test('the source list follows a language change', async () => {
     const app = await mountApp({ fetch: respondWith('') });
     try {

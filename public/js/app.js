@@ -12,11 +12,14 @@ import {
 import { createScanState } from './state.js';
 import { parseSnapshot } from './snapshot.js';
 import {
+    addSource,
+    defaultSources,
     dropDisabledSources,
     orderForScan,
     parseSources,
     rateBySourceId,
     recordScan,
+    removeSource,
     serializeSources,
     setEnabled,
     shortUrl,
@@ -101,6 +104,7 @@ function setLanguage(lang) {
 
     document.getElementById('inputProxies').placeholder = table.inputPlaceholder;
     document.getElementById('outputProxies').placeholder = table.outputPlaceholder;
+    document.getElementById('sourceUrlInput').placeholder = table.sourceUrlPlaceholder;
 }
 
 function updatePauseBtn() {
@@ -737,7 +741,37 @@ function renderSources() {
         label: shortUrl(source.url),
         detail: sourceDetail(source),
         enabled: source.enabled,
-    })));
+        removable: source.addedByUser,
+    })), translations[currentLang].removeSource);
+}
+
+// Every mutation of the list goes through here: the model is immutable, so the new list has to
+// be stored and repainted together or the two drift apart.
+function applySources(next) {
+    sources = next;
+    persistSources();
+    renderSources();
+}
+
+function addSourceFromInput() {
+    const field = document.getElementById('sourceUrlInput');
+    // addSource ignores a blank and a duplicate on purpose -- both are ordinary typing, not
+    // errors worth a toast -- so the field is cleared either way rather than only on success.
+    applySources(addSource(sources, field.value));
+    field.value = '';
+
+    // The list scrolls at 220px and a new source lands at the bottom of it, so without this the
+    // button looks like it did nothing.
+    const list = document.getElementById('sourcesList');
+    list.scrollTop = list.scrollHeight;
+}
+
+// Restores the built-ins *and* drops every score with them: this is the reset, not a
+// re-enable. Logged because it is the one control here whose effect is not visible in the row
+// the user clicked.
+function restoreSources() {
+    applySources(defaultSources());
+    log('Source list restored to the built-in defaults.');
 }
 
 // Credits every source that published a link this scan, working or not: a list is measured by
@@ -890,10 +924,19 @@ for (const id of SOCKS5_FIELDS) {
 document.getElementById('sourcesList').addEventListener('change', (e) => {
     const box = e.target.closest('input[type="checkbox"]');
     if (!box) return;
-    sources = setEnabled(sources, box.dataset.url, box.checked);
-    persistSources();
-    renderSources();
+    applySources(setEnabled(sources, box.dataset.url, box.checked));
 });
+document.getElementById('sourcesList').addEventListener('click', (e) => {
+    const btn = e.target.closest('.source-remove');
+    if (!btn) return;
+    applySources(removeSource(sources, btn.dataset.url));
+});
+document.getElementById('addSourceBtn').addEventListener('click', addSourceFromInput);
+document.getElementById('sourceUrlInput').addEventListener('keydown', (e) => {
+    // The field is not in a form, so Enter would otherwise do nothing at all.
+    if (e.key === 'Enter') addSourceFromInput();
+});
+document.getElementById('restoreSourcesBtn').addEventListener('click', restoreSources);
 
 // Painting runs last, after every listener above is attached. These walk the
 // DOM and read the translation table, so they are the statements most likely to
