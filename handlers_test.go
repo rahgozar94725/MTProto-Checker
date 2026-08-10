@@ -62,6 +62,117 @@ func TestEndpointsRejectNonPost(t *testing.T) {
 	}
 }
 
+// postWithHeaders is post with extra request headers, for the origin guard
+// below. Malformed JSON is the body throughout those tests: every endpoint
+// answers it 400, so a 400 says the guard let the request through and a 403
+// says it did not, without any of them running a check.
+func postWithHeaders(t *testing.T, path, body string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	newMux().ServeHTTP(rec, req)
+	return rec
+}
+
+// postPaths is every endpoint that acts on a request body. httptest.NewRequest
+// sets Host to example.com, so http://example.com is this server's own origin
+// for the duration of these tests.
+var postPaths = []string{"/check", "/check-batch", "/check-stream", "/fetch-sources"}
+
+// Content-Type: text/plain is CORS-safelisted, so a plain HTML form on any page
+// the user visits reaches these endpoints with no preflight and no JavaScript —
+// and the bytes an enctype=text/plain form emits are valid JSON, because the =
+// separator lands inside a string value. That drives /fetch-sources with an
+// attacker's socks5.addr, whose destination is unchecked by design on the
+// reasoning that the address comes from the user. Browsers label the request;
+// this is the label.
+func TestEndpointsRejectCrossOriginPosts(t *testing.T) {
+	for _, path := range postPaths {
+		for _, site := range []string{"cross-site", "same-site"} {
+			rec := postWithHeaders(t, path, "{", map[string]string{"Sec-Fetch-Site": site})
+
+			if rec.Code != http.StatusForbidden {
+				t.Errorf("POST %s with Sec-Fetch-Site: %s = %d, want 403", path, site, rec.Code)
+			}
+			var body map[string]string
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Errorf("POST %s: body is not JSON: %v (%q)", path, err, rec.Body.String())
+			} else if body["error"] == "" {
+				t.Errorf("POST %s: body = %q, want an error field", path, rec.Body.String())
+			}
+		}
+	}
+}
+
+func TestEndpointsRejectAForeignOriginHeader(t *testing.T) {
+	for _, path := range postPaths {
+		rec := postWithHeaders(t, path, "{", map[string]string{"Origin": "https://evil.test"})
+
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s with a foreign Origin = %d, want 403", path, rec.Code)
+		}
+	}
+}
+
+// The guard is a browser control, not authentication. curl and every script
+// against the documented HTTP API send neither header, and must keep working —
+// which is also why it can never be described as auth: anything that sets its
+// own headers walks straight past it.
+func TestEndpointsAllowSameOriginAndHeaderlessPosts(t *testing.T) {
+	for _, path := range postPaths {
+		for name, headers := range map[string]map[string]string{
+			"no headers":                  {},
+			"Sec-Fetch-Site: same-origin": {"Sec-Fetch-Site": "same-origin"},
+			"Sec-Fetch-Site: none":        {"Sec-Fetch-Site": "none"},
+			"its own Origin":              {"Origin": "http://example.com"},
+			"its own Origin, over TLS":    {"Origin": "https://example.com"},
+			"same-origin with the Origin": {"Sec-Fetch-Site": "same-origin", "Origin": "http://example.com"},
+		} {
+			rec := postWithHeaders(t, path, "{", headers)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("POST %s with %s = %d, want 400 — the guard rejected its own page",
+					path, name, rec.Code)
+			}
+		}
+	}
+}
+
+// The guard runs before the body is touched, so a cross-origin request costs
+// nothing to refuse. Malformed JSON would be a 400 and an oversized body a 413;
+// both answer 403 instead.
+func TestOriginGuardRunsBeforeTheBodyIsRead(t *testing.T) {
+	oversized := strings.Repeat("a", maxBodySize+1)
+
+	for _, body := range []string{"{", oversized} {
+		rec := postWithHeaders(t, "/fetch-sources", body, map[string]string{"Sec-Fetch-Site": "cross-site"})
+
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+	}
+}
+
+// /check-stream commits to an event stream as soon as it writes, so its
+// rejections have to land before that — the same rule its 405 and 413 follow.
+func TestCheckStreamRejectsCrossOriginWithPlainJSON(t *testing.T) {
+	rec := postWithHeaders(t, "/check-stream", "[]", map[string]string{"Sec-Fetch-Site": "cross-site"})
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want JSON", ct)
+	}
+	if strings.Contains(rec.Body.String(), "event:") {
+		t.Errorf("body carries SSE frames: %q", rec.Body.String())
+	}
+}
+
 func TestCheckRejectsMalformedJSON(t *testing.T) {
 	rec := post(t, "/check", "{not json")
 

@@ -117,9 +117,12 @@ var sourceTimeout = 30 * time.Second
 var fetchSourcesSlots = make(chan struct{}, maxFetchSourcesInFlight)
 
 // The SSRF policy for /fetch-sources. The server fetches arbitrary URLs on
-// request and HOST=0.0.0.0 is a supported deployment with no auth and no
-// origin check, so an unchecked source URL is a request-forgery primitive
-// pointed at whatever the server can reach and the client cannot.
+// request and HOST=0.0.0.0 is a supported deployment with no auth, so an
+// unchecked source URL is a request-forgery primitive pointed at whatever the
+// server can reach and the client cannot. sameOriginOnly keeps a page the user
+// merely visited from driving this, but it is a browser control and stops
+// nothing that sets its own headers — the policy below is what actually bounds
+// where a fetch may go.
 //
 // allowPlainHTTPSources and allowedSourceIP are the two test seams and nothing
 // else — false and nil in production, written only by fetchsources_test.go,
@@ -685,6 +688,42 @@ func jsonResponse(w http.ResponseWriter, status int, v interface{}) {
 	json.NewEncoder(w).Encode(v)
 }
 
+// sameOriginOnly refuses a POST that a browser labelled as coming from another
+// site. It is a browser control and not authentication — anything that sets its
+// own headers walks straight past it, and it must never be counted as a reason
+// this server does not need auth.
+//
+// It exists because every endpoint here acts on its body, and Content-Type:
+// text/plain is CORS-safelisted: a plain HTML form on any page the user visits
+// reaches them with no preflight and no JavaScript, and the bytes an
+// enctype=text/plain form emits are valid JSON, because the = separator lands
+// inside a string value. The response stays unreadable cross-origin, but the
+// side effect fires and its timing is readable — which turns /fetch-sources'
+// caller-supplied socks5.addr into a three-state port-scan oracle over the
+// victim's loopback and LAN. That address is left unchecked on the reasoning
+// that it is the user's own Tor or tunnel; this is what keeps that true.
+//
+// Both headers are optional and an absent pair is allowed, deliberately: curl
+// and every script against the documented POST /check API send neither, while
+// browsers send Sec-Fetch-Site on every request. same-site is rejected along
+// with cross-site — a sibling subdomain is not this origin.
+func sameOriginOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Header.Get("Sec-Fetch-Site") {
+		case "", "same-origin", "none":
+		default:
+			jsonResponse(w, http.StatusForbidden, map[string]string{"error": "cross-origin request rejected"})
+			return
+		}
+		if origin := r.Header.Get("Origin"); origin != "" &&
+			origin != "http://"+r.Host && origin != "https://"+r.Host {
+			jsonResponse(w, http.StatusForbidden, map[string]string{"error": "cross-origin request rejected"})
+			return
+		}
+		next(w, r)
+	}
+}
+
 // recoverMiddleware turns a panic in a handler into a 500 with a JSON body,
 // so one bad request cannot take the process down mid-scan.
 func recoverMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -705,7 +744,7 @@ func recoverMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func newMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/check", recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/check", recoverMiddleware(sameOriginOnly(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -741,9 +780,9 @@ func newMux() *http.ServeMux {
 			log.Printf("CHECK OK   %s:%d %dms timeout=%ds (%v)", req.Server, req.Port, ping, timeout, elapsed)
 			jsonResponse(w, http.StatusOK, CheckResponse{OK: true, Ping: ping})
 		}
-	}))
+	})))
 
-	mux.HandleFunc("/check-batch", recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/check-batch", recoverMiddleware(sameOriginOnly(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -849,9 +888,9 @@ func newMux() *http.ServeMux {
 			working, len(reqs), time.Since(tcpStart), time.Since(telegramStart), time.Since(start))
 
 		jsonResponse(w, http.StatusOK, results)
-	}))
+	})))
 
-	mux.HandleFunc("/check-stream", recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/check-stream", recoverMiddleware(sameOriginOnly(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -993,9 +1032,9 @@ func newMux() *http.ServeMux {
 		wg.Wait()
 		log.Printf("STREAM DONE %d/%d working", working, total)
 		sendEvent("done", map[string]int{"working": working, "total": total})
-	}))
+	})))
 
-	mux.HandleFunc("/fetch-sources", recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/fetch-sources", recoverMiddleware(sameOriginOnly(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -1080,7 +1119,7 @@ func newMux() *http.ServeMux {
 				io.WriteString(w, "\n")
 			}
 		}
-	}))
+	})))
 
 	embeddedFS, err := fs.Sub(publicFS, "public")
 	if err != nil {
