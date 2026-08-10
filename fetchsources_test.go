@@ -627,6 +627,49 @@ func TestFetchSourcesChecksARedirectOnTheSOCKS5Path(t *testing.T) {
 	}
 }
 
+// The SOCKS5 leg has no dial hook to hang its destination check on, so it
+// resolves the name itself — and it must do so freshly. dnsCache is written by
+// tcpCheck from a fully caller-supplied hostname, so a caller who can reach
+// /check can seed an allowed answer for a name they control and spend the next
+// five minutes pointing it wherever they like: this check would read the stale
+// allowed address while the proxy resolves the name again at connect time.
+func TestCheckSOCKS5DestinationDoesNotTrustTheDNSCache(t *testing.T) {
+	const host = "localhost"
+
+	dnsCacheMu.Lock()
+	orig, had := dnsCache[host]
+	dnsCache[host] = &dnsCacheEntry{
+		ips:  []net.IP{net.IPv4(93, 184, 216, 34)},
+		next: time.Now().Add(5 * time.Minute),
+	}
+	dnsCacheMu.Unlock()
+	t.Cleanup(func() {
+		dnsCacheMu.Lock()
+		if had {
+			dnsCache[host] = orig
+		} else {
+			delete(dnsCache, host)
+		}
+		dnsCacheMu.Unlock()
+	})
+
+	if err := checkSOCKS5Destination(host + ":1080"); err == nil {
+		t.Fatal("checkSOCKS5Destination = nil, want an error — it read the primed cache entry " +
+			"instead of resolving localhost itself")
+	}
+}
+
+// The other direction, and it is load-bearing rather than lenient: a name only
+// the proxy can resolve is the case the whole SOCKS5 path exists for, so a
+// resolution failure here must let the fetch through. Hermetic — the empty host
+// fails inside net before any query leaves the machine. Mutation-checked by
+// returning the lookup error instead of nil, which fails this test.
+func TestCheckSOCKS5DestinationAllowsANameItCannotResolve(t *testing.T) {
+	if err := checkSOCKS5Destination(":1080"); err != nil {
+		t.Fatalf("checkSOCKS5Destination = %v, want nil — an unresolvable name is left to the proxy", err)
+	}
+}
+
 // The destination policy is a denylist, and the predicates it is built on cover
 // less than they look like they do: net.IP.IsPrivate knows 10/8, 172.16/12,
 // 192.168/16 and fc00::/7 and nothing else. This is the table that pins the
