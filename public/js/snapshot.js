@@ -21,7 +21,7 @@
 // input is a file fetched over the network and the caller is the UI's boot path.
 
 import { parseLink, proxyKey } from './parse.js';
-import { DEFAULT_SOURCE_OWNERS } from './sources.js';
+import { DEFAULT_SOURCES, DEFAULT_SOURCE_OWNERS } from './sources.js';
 
 const GENERATED_RE = /^#\s*generated\s+(\S+)/;
 // The index is bounded because `sources[Number(id)] = url` on a sparse array is an allocation
@@ -61,7 +61,8 @@ export function splitFragment(line) {
 
 // → { generatedAt, sources, links, attribution }
 //   generatedAt  the ISO string off the header, '' when there is no header line
-//   sources      index → short url, indexed by the id used in `src=`
+//   sources      index → short url, indexed by the id used in `src=`, exactly as the file
+//                claims it — pass it through resolveSourceUrls before acting on it
 //   links        fragment-free links in file order, i.e. in scan order
 //   attribution  Map<proxyKey, {seen, srcs}>, absent for a line without the fragment
 export function parseSnapshot(text = '') {
@@ -134,4 +135,30 @@ function countPublishers(srcs) {
         if (owner !== undefined) owners.add(owner);
     }
     return owners.size;
+}
+
+// → what a `src=` id actually names: this build's own DEFAULT_SOURCES for every id that list
+// covers, the file's header only for ids past it.
+//
+// `sources` above is what the file *claims*, and a branch that can write the lines writes the
+// header too — the reasoning countPublishers already follows for `seen`. The other two
+// consumers of the same ids were left trusting it. dropDisabledSources maps a disabled
+// source's url back to the ids to drop, so a header relabelling source 0 as a url this model
+// has never heard of leaves that set empty and every link of a source the user explicitly
+// disabled loads and is scanned; the same one-word edit skews rateBySourceId, the second
+// scan-order key. Neither is a judgement the header gets to make.
+//
+// `src=` ids are positions in DEFAULT_SOURCES, so for every id this build covers the header is
+// redundant and the model already holds the answer. Past that the header is the only answer
+// there is — a client older than the snapshot it just fetched — and is kept.
+//
+// A header slot that holds no string is left as a hole rather than copied across: rateBySourceId
+// maps over this array, and Array.prototype.map skips holes but hands `undefined` to shortUrl(),
+// which would throw on it.
+export function resolveSourceUrls(sources = []) {
+    const resolved = DEFAULT_SOURCES.slice();
+    for (let id = DEFAULT_SOURCES.length; id < sources.length; id++) {
+        if (typeof sources[id] === 'string') resolved[id] = sources[id];
+    }
+    return resolved;
 }

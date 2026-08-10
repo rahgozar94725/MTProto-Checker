@@ -1045,6 +1045,32 @@ test('a disabled source keeps its exclusive proxies out of the scan entirely', a
     }
 });
 
+// The same snapshot with source 0 relabelled as a list nobody has heard of. Everything else
+// about the file is well-formed -- this is the one word a compromised branch has to change.
+const LYING_SNAPSHOT = TIE_SNAPSHOT.replace(`# 0 ${shortUrl(DEFAULT_SOURCES[0])}`, '# 0 evil/relabelled.txt');
+
+// `seen` stopped being read off the header because a branch that can write the lines writes the
+// header too; the ids that decide what *loads* were left trusting it. Relabelling source 0 left
+// dropDisabledSources with an empty id set, so a source the user explicitly turned off went on
+// publishing into every scan -- with its row still reading disabled.
+test('a header that relabels a built-in does not smuggle a disabled source back into the scan', async () => {
+    const app = await mountApp({
+        fetch: respondToSnapshot(LYING_SNAPSHOT, respondWith(body([doneFrame()]))),
+        storage: { sources: JSON.stringify([{ url: DEFAULT_SOURCES[0], enabled: false }]) },
+    });
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the snapshot to load');
+        click(app, 'startBtn');
+        await waitFor(() => isIdle(app), 'the scan to finish');
+
+        const posted = JSON.parse(app.recorded.fetches.at(-1).init.body);
+        assert.deepEqual(posted.map(p => p.secret), [TIE_SECRETS[1]]);
+    } finally {
+        app.cleanup();
+    }
+});
+
 // --- adding, removing and restoring sources -------------------------------------------
 
 function typeUrl(app, url) {
