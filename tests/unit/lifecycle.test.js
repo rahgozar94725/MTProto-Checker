@@ -648,6 +648,80 @@ test('disabling every source leaves nothing to load, and says so', async () => {
     }
 });
 
+// #loadListBtn is in .btn-row, which the scanning collapse does not touch, so nothing about the
+// page stopped this. A load replaces the attribution map and the header the scan is credited
+// against, so one landing mid-scan scores sources that scan was never ordered by.
+test('Load-list is refused, and says so, while a scan is running', async () => {
+    const requests = [];
+    const app = await mountApp({ fetch: respondManually(requests) });
+    const loadBtn = () => app.document.getElementById('loadListBtn');
+    try {
+        paste(app, link('192.0.2.10'));
+        click(app, 'startBtn');
+        await waitFor(() => requests.length === 1, 'the scan to start');
+
+        assert.equal(loadBtn().disabled, true);
+        click(app, 'loadListBtn');
+        await tick();
+        assert.equal(app.recorded.fetches.length, 1, 'the scan is the only request in flight');
+
+        // The attribute is what the user is told; the handler's own check is what holds if
+        // anything ever stops maintaining it. Re-enabling by hand is the only way to reach it.
+        loadBtn().disabled = false;
+        click(app, 'loadListBtn');
+        await tick();
+        assert.equal(app.recorded.fetches.length, 1, 'the handler refuses a scan-time load on its own');
+
+        requests[0].push(body([doneFrame()]));
+        requests[0].close();
+        await waitFor(() => isIdle(app), 'the scan to finish');
+        assert.equal(loadBtn().disabled, false, 'and the button comes back');
+    } finally {
+        app.cleanup();
+    }
+});
+
+// The second click used to start a duplicate set of /fetch-sources POSTs and a second textarea
+// overwrite, with nothing on the page saying a load was already running.
+test('a second Load-list click while the first is in flight starts no second load', async () => {
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    const posts = [];
+    const app = await mountApp({
+        fetch: async (url, init) => {
+            if (String(url) === '/fetch-sources') {
+                posts.push(JSON.parse(init.body).urls);
+                await held;
+                return textResponse(SNAPSHOT_TEXT);
+            }
+            return respondWith('')(url, init);
+        },
+    });
+    const loadBtn = () => app.document.getElementById('loadListBtn');
+    try {
+        click(app, 'loadListBtn');
+        await waitFor(() => posts.length === 1, 'the first load to reach the network');
+        assert.equal(loadBtn().disabled, true);
+
+        click(app, 'loadListBtn');
+        await tick();
+        assert.equal(posts.length, 1, 'the second click starts nothing');
+
+        // Same as above: the flag, not the attribute, is what makes a re-entrant call a no-op.
+        loadBtn().disabled = false;
+        click(app, 'loadListBtn');
+        await tick();
+        assert.equal(posts.length, 1, 'and neither does one that gets past the attribute');
+
+        release();
+        await waitFor(() => app.document.getElementById('inputProxies').value !== '', 'the load to finish');
+        assert.deepEqual(app.document.getElementById('inputProxies').value.split('\n'), SNAPSHOT_LINKS);
+        assert.equal(loadBtn().disabled, false);
+    } finally {
+        app.cleanup();
+    }
+});
+
 // --- the SOCKS5 proxy the server fetches through -------------------------------------
 
 function typeInto(app, id, value) {
