@@ -628,6 +628,69 @@ button:active:not(:disabled),
     text-align: center;
 }
 
+/* ===== Source list ===== */
+/* Collapsed by default and styled like the console drawer, not like the button rows: the
+   list is provenance for people who want it, and never competes with Load list. */
+.sources-drawer {
+    margin-top: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.sources-drawer summary {
+    cursor: pointer;
+    list-style: none;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.sources-drawer summary::before {
+    content: "▸ ";
+    color: var(--muted);
+}
+
+.sources-drawer[open] summary::before {
+    content: "▾ ";
+}
+
+.sources-list {
+    max-height: 220px;
+    overflow-y: auto;
+    border-block-start: 1px solid var(--border);
+    scrollbar-width: thin;
+}
+
+.source-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-xs);
+    cursor: pointer;
+}
+
+.source-row:hover {
+    background: var(--input);
+}
+
+/* A url is LTR whatever the UI direction is, and long enough to need to wrap somewhere. */
+.source-name {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    direction: ltr;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.source-detail {
+    color: var(--muted);
+    white-space: nowrap;
+}
+
 .btn-stop {
     background: linear-gradient(135deg, rgba(239,68,68,0.9), rgba(220,38,38,0.9));
 }

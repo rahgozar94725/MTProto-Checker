@@ -17,6 +17,8 @@
 // to the defaults rather than throwing, because the throw would abort module evaluation and
 // take the whole page's event wiring with it.
 
+import { proxyKey } from './parse.js';
+
 export const RAW_PREFIX = 'https://raw.githubusercontent.com/';
 
 export const DEFAULT_SOURCES = [
@@ -162,6 +164,60 @@ export function recordScan(sources, { sourceUrls = [], provided = [], working = 
             },
         };
     });
+}
+
+// → one working rate per `src=` id, i.e. indexed the way the snapshot header is. A source the
+// user disabled rates 0 rather than being left out, so a disabled list stops pulling proxies
+// up the scan order without changing what the ids mean.
+//
+// Zero is also what an unscored source, an unknown header slot and a stored score claiming
+// zero published links all rate — the last one is why the division is guarded rather than
+// trusted: readScore() accepts `linksProvided: 0` as a well-formed foreign value.
+export function rateBySourceId(sources, sourceUrls = []) {
+    const byKey = new Map();
+    for (const source of sources) {
+        if (!source.enabled) continue;
+        if (!source.score || source.score.linksProvided === 0) continue;
+        byKey.set(shortUrl(source.url), source.score.linksWorking / source.score.linksProvided);
+    }
+
+    return sourceUrls.map(url => byKey.get(shortUrl(url)) || 0);
+}
+
+// → the proxies reordered for scanning: most-redundant first, then best-scoring source first.
+// File order is scan order on the server (`/check-stream` walks the request body in order), so
+// this is what decides which proxies a user watching the first rows actually sees.
+//
+// Both keys point the same way and both were measured: redundancy predicts life (`seen>=5` at
+// 81–100 % against `seen<=2` at 15–24 %, reproduced twice — see tasks/plan.md Phase 0b), and a
+// source's own hit rate is the user's local re-derivation of the same ranking. A proxy is
+// ranked by its *best* source, matching recordScan's credit-every-source rule; ranking by
+// `srcs[0]` would make the order a function of DEFAULT_SOURCES order instead.
+//
+// Anything the snapshot never mentioned ranks 0 on both keys and lands at the end in paste
+// order — Array.prototype.sort is stable, so a pasted list with no attribution at all comes
+// back exactly as it went in.
+export function orderForScan(proxies, { attribution = new Map(), rates = [] } = {}) {
+    return proxies
+        .map(proxy => ({ proxy, meta: attribution.get(proxyKey(proxy)) }))
+        .sort((a, b) => seenOf(b.meta) - seenOf(a.meta) || bestRate(b.meta, rates) - bestRate(a.meta, rates))
+        .map(entry => entry.proxy);
+}
+
+function seenOf(meta) {
+    return meta ? meta.seen : 0;
+}
+
+function bestRate(meta, rates) {
+    if (!meta) return 0;
+
+    let best = 0;
+    for (const id of meta.srcs) {
+        const rate = rates[id] || 0;
+        if (rate > best) best = rate;
+    }
+
+    return best;
 }
 
 // One tally entry per (link, source) pair, keyed the way the header names the source. The Set

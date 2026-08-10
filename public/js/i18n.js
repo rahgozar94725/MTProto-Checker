@@ -47,7 +47,10 @@ export const translations = {
         loadListBtn: "بارگذاری لیست",
         snapshotDate: "لیست داخلی — {date}",
         toastSnapshotLoaded: "✅ {n} لینک از لیست داخلی بارگذاری شد!",
-        toastSnapshotFailed: "⛔ بارگذاری لیست داخلی ناموفق بود"
+        toastSnapshotFailed: "⛔ بارگذاری لیست داخلی ناموفق بود",
+        sourcesTitle: "منابع لیست",
+        sourceScore: "{n} لینک · {w} سالم ({rate}٪)",
+        sourceUnscored: "هنوز بررسی نشده"
     },
     en: {
         title: "MTProto Checker",
@@ -94,7 +97,10 @@ export const translations = {
         loadListBtn: "Load list",
         snapshotDate: "Built-in list — {date}",
         toastSnapshotLoaded: "✅ Loaded {n} links from the built-in list!",
-        toastSnapshotFailed: "⛔ Could not load the built-in list"
+        toastSnapshotFailed: "⛔ Could not load the built-in list",
+        sourcesTitle: "List sources",
+        sourceScore: "{n} links · {w} working ({rate} %)",
+        sourceUnscored: "not scanned yet"
     },
     ru: {
         title: "MTProto Checker",
@@ -141,7 +147,10 @@ export const translations = {
         loadListBtn: "Загрузить список",
         snapshotDate: "Встроенный список — {date}",
         toastSnapshotLoaded: "✅ Загружено {n} ссылок из встроенного списка!",
-        toastSnapshotFailed: "⛔ Не удалось загрузить встроенный список"
+        toastSnapshotFailed: "⛔ Не удалось загрузить встроенный список",
+        sourcesTitle: "Источники списка",
+        sourceScore: "{n} ссылок · {w} рабочих ({rate} %)",
+        sourceUnscored: "ещё не проверялся"
     },
     zh: {
         title: "MTProto Checker",
@@ -188,7 +197,10 @@ export const translations = {
         loadListBtn: "加载列表",
         snapshotDate: "内置列表 — {date}",
         toastSnapshotLoaded: "✅ 已从内置列表加载 {n} 条链接!",
-        toastSnapshotFailed: "⛔ 无法加载内置列表"
+        toastSnapshotFailed: "⛔ 无法加载内置列表",
+        sourcesTitle: "列表来源",
+        sourceScore: "{n} 条链接 · {w} 可用（{rate}%）",
+        sourceUnscored: "尚未扫描"
     }
 };
 

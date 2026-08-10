@@ -4,12 +4,22 @@ import { parseProxyList, proxyKey, isAcceptedFilename } from './parse.js';
 import { createSSEParser } from './sse.js';
 import {
     renderResultsTable,
+    renderSourceRows,
     renderStats as renderStatTiles,
     setResultsView as applyResultsView,
     showToast as paintToast,
 } from './render.js';
 import { createScanState } from './state.js';
 import { parseSnapshot } from './snapshot.js';
+import {
+    orderForScan,
+    parseSources,
+    rateBySourceId,
+    recordScan,
+    serializeSources,
+    setEnabled,
+    shortUrl,
+} from './sources.js';
 
 // All mutable scan state lives here; nothing below declares its own.
 const state = createScanState();
@@ -125,6 +135,7 @@ function changeLanguage(lang) {
     updatePauseBtn();
     updateStartBtn();
     renderSnapshotMeta();
+    renderSources();
     if (state.scanState === 'scanning') updateScanSummary();
     scheduleResultsRender();
 }
@@ -260,7 +271,14 @@ async function runCheckStream(proxies, linkMap) {
     const timeoutSec = getTimeout();
     let scanDone = false;
 
-    const body = proxies.map(p => ({
+    // Scan order is file order on the server, so the ranking is applied here, where the body
+    // is built -- not to the textarea, which stays exactly as the user (or the snapshot) left it.
+    const ordered = orderForScan(proxies, {
+        attribution: state.snapshotAttribution,
+        rates: rateBySourceId(sources, snapshotSourceUrls),
+    });
+
+    const body = ordered.map(p => ({
         server: p.server, port: p.port, secret: p.secret, timeout: timeoutSec
     }));
 
@@ -441,6 +459,7 @@ document.getElementById('resultsBody').addEventListener('click', (e) => {
 function finish() {
     const t = translations[currentLang];
     resetScanUI();
+    creditSources();
     log('Process finished.');
 
     if (state.workingProxies.length > 0) {
@@ -545,13 +564,16 @@ async function loadSnapshot() {
 
         // parseSnapshot is total, so an unusable file arrives as zero links rather than a
         // throw -- which is still a failed load from the user's point of view.
-        const { generatedAt, links, attribution } = parseSnapshot(await response.text());
+        const { generatedAt, sources: header, links, attribution } = parseSnapshot(await response.text());
         if (links.length === 0) throw new Error('no links in snapshot');
 
         document.getElementById('inputProxies').value = links.join('\n');
         // Replaced rather than merged: the file just fetched is the whole truth about
         // which sources published what. A failed load keeps the previous map instead.
         state.snapshotAttribution = attribution;
+        // The header is what joins a `src=` id to a source url, so scoring and scan
+        // ordering are both dead until a snapshot has been loaded at least once.
+        snapshotSourceUrls = header;
         snapshotGeneratedAt = generatedAt;
         renderSnapshotMeta();
         log(`Loaded ${links.length} links from the built-in list.`);
@@ -562,6 +584,67 @@ async function loadSnapshot() {
         log(`SNAPSHOT ERROR: ${err.message}`, true);
         showToast(t.toastSnapshotFailed, true);
     }
+}
+
+// The source list, and the two things it decides: what the rows say, and what order the next
+// scan is posted in. sources.js owns the model and every rule about it; this file owns the
+// storage key, the wiring and the localized text -- the same split parse.js and render.js have.
+//
+// parseSources is total, so a foreign value on this shared origin resolves to the defaults
+// rather than throwing out of the module's top level and taking the wiring block with it.
+let sources = parseSources(readStored('sources'));
+
+// index -> source url, off the header of the last snapshot loaded. Empty until then, which is
+// what makes a pasted-only session score nothing and order nothing.
+let snapshotSourceUrls = [];
+
+function persistSources() {
+    writeStored('sources', serializeSources(sources));
+}
+
+function sourceDetail(source) {
+    const t = translations[currentLang];
+    // A stored score claiming zero published links is well-formed as far as sources.js is
+    // concerned; dividing by it here would put NaN on the page.
+    if (!source.score || source.score.linksProvided === 0) return t.sourceUnscored;
+
+    const { linksProvided, linksWorking } = source.score;
+    return interpolate(t.sourceScore, {
+        n: linksProvided,
+        w: linksWorking,
+        rate: ((linksWorking / linksProvided) * 100).toFixed(1),
+    });
+}
+
+function renderSources() {
+    renderSourceRows(document, sources.map(source => ({
+        url: source.url,
+        label: shortUrl(source.url),
+        detail: sourceDetail(source),
+        enabled: source.enabled,
+    })));
+}
+
+// Credits every source that published a link this scan, working or not: a list is measured by
+// what its links did, and a link that failed is evidence about the list that published it.
+// Nothing is credited when no snapshot has been loaded -- a pasted link has no source.
+function creditSources() {
+    if (snapshotSourceUrls.length === 0) return;
+
+    const provided = [];
+    for (const key of state.checkedKeys) {
+        const meta = state.snapshotAttribution.get(key);
+        if (meta) provided.push(meta.srcs);
+    }
+
+    sources = recordScan(sources, {
+        sourceUrls: snapshotSourceUrls,
+        provided,
+        working: state.workingProxies.filter(p => p.srcs).map(p => p.srcs),
+        scannedAt: new Date().toISOString(),
+    });
+    persistSources();
+    renderSources();
 }
 
 function readProxyFile(file) {
@@ -684,6 +767,15 @@ document.getElementById('viewTextBtn').addEventListener('click', () => applyResu
 document.getElementById('copyBtn').addEventListener('click', copyResults);
 document.getElementById('exportTxtBtn').addEventListener('click', () => exportResults('txt'));
 document.getElementById('exportJsonBtn').addEventListener('click', () => exportResults('json'));
+// One delegated listener, because renderSources() rebuilds every row wholesale -- the same
+// reason the per-row copy button is delegated onto #resultsBody.
+document.getElementById('sourcesList').addEventListener('change', (e) => {
+    const box = e.target.closest('input[type="checkbox"]');
+    if (!box) return;
+    sources = setEnabled(sources, box.dataset.url, box.checked);
+    persistSources();
+    renderSources();
+});
 
 // Painting runs last, after every listener above is attached. These walk the
 // DOM and read the translation table, so they are the statements most likely to
@@ -692,5 +784,6 @@ document.getElementById('exportJsonBtn').addEventListener('click', () => exportR
 setLanguage(currentLang);
 setTheme(currentTheme);
 updateStartBtn();
+renderSources();
 loadSettings();
 if (soundCheck) syncSoundUI();

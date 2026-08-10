@@ -12,7 +12,9 @@ import {
     DEFAULT_SOURCES,
     addSource,
     defaultSources,
+    orderForScan,
     parseSources,
+    rateBySourceId,
     recordScan,
     removeSource,
     serializeSources,
@@ -311,4 +313,117 @@ for (const [name, score] of [
 test('shortUrl drops the raw.githubusercontent.com prefix and leaves anything else alone', () => {
     assert.equal(shortUrl(DEFAULT_SOURCES[0]), 'iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt');
     assert.equal(shortUrl(USER_URL), USER_URL);
+});
+
+// --- Task 10: what the scan order is built from -------------------------------------
+
+// The rates a scan-ordering comparison reads, and the ordering itself. Both are pure and
+// both are keyed through the snapshot header, which is the only thing joining a `src=` id
+// to a source URL.
+
+const RATED = recordScan(defaultSources(), {
+    sourceUrls: HEADER,
+    provided: [[0], [0], [0], [0], [1], [1]],   // source 0 published 4 links, source 1 two
+    working: [[0]],                              // one of source 0's worked; none of source 1's
+    scannedAt: 'first',
+});
+
+test('rateBySourceId keys a source rate by the header id the snapshot used', () => {
+    assert.deepEqual(rateBySourceId(RATED, HEADER), [0.25, 0, 0]);
+});
+
+test('rateBySourceId rates a disabled source zero, so disabling it stops ranking with it', () => {
+    const off = setEnabled(RATED, DEFAULT_SOURCES[0], false);
+
+    assert.deepEqual(rateBySourceId(off, HEADER), [0, 0, 0]);
+});
+
+test('rateBySourceId rates an unscored source zero rather than NaN', () => {
+    assert.deepEqual(rateBySourceId(defaultSources(), HEADER), [0, 0, 0]);
+});
+
+test('rateBySourceId rates a stored zero-link score zero instead of dividing by it', () => {
+    const stored = `[{"url":${JSON.stringify(DEFAULT_SOURCES[0])},"enabled":true,` +
+        `"score":{"linksProvided":0,"linksWorking":0,"lastScan":"once"}}]`;
+
+    assert.deepEqual(rateBySourceId(parseSources(stored), HEADER), [0, 0, 0]);
+});
+
+test('rateBySourceId ignores a header slot no source in the model matches', () => {
+    assert.deepEqual(rateBySourceId(RATED, ['example.invalid/nobody.txt']), [0]);
+});
+
+// The scan list, in the shape parseProxyList() hands back.
+function px(server, secret = 'dd01') {
+    return { server, port: 443, secret, original: `tg://proxy?server=${server}&port=443&secret=${secret}` };
+}
+
+function attributed(entries) {
+    return new Map(entries.map(([proxy, seen, srcs]) => [`${proxy.server}:443:${proxy.secret}`, { seen, srcs }]));
+}
+
+test('orderForScan puts the most-redundant proxy first', () => {
+    const [a, b, c] = [px('192.0.2.1'), px('192.0.2.2'), px('192.0.2.3')];
+    const attribution = attributed([[a, 1, [0]], [b, 7, [0]], [c, 3, [0]]]);
+
+    assert.deepEqual(
+        orderForScan([a, b, c], { attribution }).map(p => p.server),
+        ['192.0.2.2', '192.0.2.3', '192.0.2.1']
+    );
+});
+
+test('orderForScan breaks a tie on seen by the best-scoring source', () => {
+    const [a, b] = [px('192.0.2.1'), px('192.0.2.2')];
+    const attribution = attributed([[a, 2, [1]], [b, 2, [0]]]);
+    const rates = rateBySourceId(RATED, HEADER);   // source 0 at 0.25, source 1 at 0
+
+    assert.deepEqual(
+        orderForScan([a, b], { attribution, rates }).map(p => p.server),
+        ['192.0.2.2', '192.0.2.1']
+    );
+});
+
+test('orderForScan ranks a proxy by its best source, not by its first', () => {
+    const [a, b] = [px('192.0.2.1'), px('192.0.2.2')];
+    // b's first source is the dead one; its second is the source that scored.
+    const attribution = attributed([[a, 2, [1]], [b, 2, [1, 0]]]);
+
+    assert.deepEqual(
+        orderForScan([a, b], { attribution, rates: rateBySourceId(RATED, HEADER) }).map(p => p.server),
+        ['192.0.2.2', '192.0.2.1']
+    );
+});
+
+test('orderForScan sorts a proxy the snapshot never mentioned last, in paste order', () => {
+    const [a, b, c] = [px('192.0.2.1'), px('192.0.2.2'), px('192.0.2.3')];
+    const attribution = attributed([[c, 1, [0]]]);
+
+    assert.deepEqual(
+        orderForScan([a, b, c], { attribution }).map(p => p.server),
+        ['192.0.2.3', '192.0.2.1', '192.0.2.2']
+    );
+});
+
+test('orderForScan rates a src id no header slot declared as zero', () => {
+    const [a, b] = [px('192.0.2.1'), px('192.0.2.2')];
+    const attribution = attributed([[a, 2, [9]], [b, 2, [0]]]);
+
+    assert.deepEqual(
+        orderForScan([a, b], { attribution, rates: rateBySourceId(RATED, HEADER) }).map(p => p.server),
+        ['192.0.2.2', '192.0.2.1']
+    );
+});
+
+test('orderForScan with nothing to go on keeps the list as it is', () => {
+    const list = [px('192.0.2.1'), px('192.0.2.2')];
+
+    assert.deepEqual(orderForScan(list), list);
+});
+
+test('orderForScan does not mutate the list it was given', () => {
+    const [a, b] = [px('192.0.2.1'), px('192.0.2.2')];
+    const list = [a, b];
+    orderForScan(list, { attribution: attributed([[b, 5, [0]]]) });
+
+    assert.deepEqual(list, [a, b]);
 });

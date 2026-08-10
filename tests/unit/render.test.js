@@ -11,6 +11,7 @@ import { mountApp } from '../helpers/dom.js';
 import { pingClass } from '../../public/js/format.js';
 import {
     renderResultsTable,
+    renderSourceRows,
     renderStats,
     setResultsView,
     showToast,
@@ -267,4 +268,54 @@ test('each scan state is independent, so two mounts cannot share one', () => {
     assert.equal(second.checkedKeys.size, 0);
     assert.equal(second.globalLinkMap.size, 0);
     assert.equal(second.scanState, 'idle');
+});
+
+test('renders one source row per source, with the checkbox reflecting enabled', async () => {
+    const app = await mountApp();
+    try {
+        renderSourceRows(app.document, [
+            { url: 'https://example.invalid/a.txt', label: 'a.txt', detail: '10 links', enabled: true },
+            { url: 'https://example.invalid/b.txt', label: 'b.txt', detail: 'never', enabled: false },
+        ]);
+
+        const rows = [...app.document.querySelectorAll('#sourcesList .source-row')];
+        assert.equal(rows.length, 2);
+        assert.deepEqual(rows.map(r => r.querySelector('input').checked), [true, false]);
+        assert.deepEqual(rows.map(r => r.querySelector('input').dataset.url), [
+            'https://example.invalid/a.txt', 'https://example.invalid/b.txt',
+        ]);
+        assert.deepEqual(rows.map(r => r.querySelector('.source-name').textContent), ['a.txt', 'b.txt']);
+        assert.deepEqual(rows.map(r => r.querySelector('.source-detail').textContent), ['10 links', 'never']);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('a source row renders its url as text, never as markup', async () => {
+    const app = await mountApp();
+    try {
+        // A user-added source is an arbitrary string typed into a text field.
+        renderSourceRows(app.document, [
+            { url: 'x', label: '<img src=x onerror="window.pwned=1">', detail: '', enabled: true },
+        ]);
+
+        assert.equal(app.document.querySelectorAll('#sourcesList img').length, 0);
+        assert.equal(app.window.pwned, undefined);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('rendering the source list twice replaces the rows instead of appending', async () => {
+    const app = await mountApp();
+    try {
+        renderSourceRows(app.document, [{ url: 'a', label: 'a', detail: '', enabled: true }]);
+        renderSourceRows(app.document, [{ url: 'b', label: 'b', detail: '', enabled: true }]);
+
+        const rows = [...app.document.querySelectorAll('#sourcesList .source-row')];
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].querySelector('.source-name').textContent, 'b');
+    } finally {
+        app.cleanup();
+    }
 });

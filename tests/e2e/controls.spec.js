@@ -4,7 +4,7 @@
 // addEventListener calls at the bottom of app.js, and a dropped or misspelled line there is
 // invisible to every other layer of the suite: the unit tests import the modules directly,
 // and jsdom cannot execute <script type="module"> at all. Only a real browser loading the
-// real page proves the wiring survived — so each of the twelve controls below gets an
+// real page proves the wiring survived — so each of the thirteen controls below gets an
 // assertion on an effect the user can see.
 //
 // Expected labels come from public/js/i18n.js rather than from literals; locale parity is
@@ -12,6 +12,7 @@
 // mean editing them twice.
 import { test, expect } from '@playwright/test';
 import { translations } from '../../public/js/i18n.js';
+import { DEFAULT_SOURCES } from '../../public/js/sources.js';
 
 const T = translations.fa; // the default locale, and what the page boots with
 
@@ -179,6 +180,31 @@ test.describe('every migrated control still fires', () => {
         await expect(page.locator('#toast')).toHaveClass('toast show success');
         await expect(page.locator('#snapshotMeta')).not.toHaveText('');
         await expect(page.locator('#console')).toContainText('links from the built-in list');
+
+        expect(errors).toEqual([]);
+    });
+
+    test('#sourcesList disables a source and the choice survives a reload', async ({ page }) => {
+        const errors = collectErrors(page);
+        await page.goto('/');
+
+        // Collapsed by default, so the rows are there but not in the way.
+        await expect(page.locator('#sourcesList .source-row')).toHaveCount(DEFAULT_SOURCES.length);
+        await expect(page.locator('#sourcesList input[type="checkbox"]').nth(1)).toBeHidden();
+
+        await page.locator('#sourcesDrawer summary').click();
+        const boxes = page.locator('#sourcesList input[type="checkbox"]');
+        await expect(boxes.nth(1)).toBeChecked();
+        await expect(page.locator('#sourcesList .source-row').nth(1)).toContainText(T.sourceUnscored);
+
+        await boxes.nth(1).uncheck();
+        await expect(boxes.nth(1)).not.toBeChecked();
+        await expect(boxes.nth(0)).toBeChecked();
+
+        // The point of persisting it: a source turned off stays off.
+        await page.reload();
+        await page.locator('#sourcesDrawer summary').click();
+        await expect(page.locator('#sourcesList input[type="checkbox"]').nth(1)).not.toBeChecked();
 
         expect(errors).toEqual([]);
     });
