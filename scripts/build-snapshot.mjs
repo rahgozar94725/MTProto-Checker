@@ -116,12 +116,20 @@ export function snapshotLines(universe) {
 // Known residual, and it is not small: a source whose contents are *replaced* rather than
 // appended to keeps its count and passes. Catching that needs a churn comparison against the
 // previous snapshot, which is a separate change.
+// The slack term is on the high side only, and that asymmetry is the point. Subtracted on the
+// low side it erased the band for every source too small to absorb it: ten of the seventeen
+// defaults carry 14–15 links, `ceil((14 - 20) / 2)` is -3, and `unique < low` can never be
+// true — so those ten had no lower bound at all and their only floor was the empty-source
+// check below. That is the cheap half of the attack this guard exists to catch: set each of
+// them to one attacker line and every gate stays green. Halving is the floor now, never below
+// 1, which costs a red run on a genuinely bad day at a small source — which is a human
+// looking at it, i.e. the guard working.
 const DRIFT_FACTOR = 2;
 const DRIFT_SLACK = 20;
 
 export function driftBand(baseline) {
     return {
-        low: Math.ceil((baseline - DRIFT_SLACK) / DRIFT_FACTOR),
+        low: Math.max(1, Math.ceil(baseline / DRIFT_FACTOR)),
         high: baseline * DRIFT_FACTOR + DRIFT_SLACK,
     };
 }

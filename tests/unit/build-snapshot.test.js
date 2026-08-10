@@ -199,14 +199,25 @@ const withCounts = (...counts) => ({
 const observed = (...counts) => counts.map((unique, index) => ({ index, unique, duplicates: 0, spam: 0 }));
 
 test('driftBand is loose enough for daily variation and tight enough to catch a flood', () => {
-    assert.deepEqual(driftBand(100), { low: 40, high: 220 });
-    // Small sources get the slack term, which on the low side means only zero trips them —
-    // and zero is already a build failure through the empty-source check.
-    assert.deepEqual(driftBand(14), { low: -3, high: 48 });
+    assert.deepEqual(driftBand(100), { low: 50, high: 220 });
+});
+
+// The slack term belongs on the high side only. Applied to the low side it subtracted a flat
+// 20 from a range that small sources do not have: ten of the seventeen real sources carry
+// 14–15 links, so `ceil((14 - 20) / 2)` was -3 and `unique < low` could never be true for any
+// of them. Their only remaining floor was "no parseable link at all", which is what let the
+// replacement attack the guard exists to catch — set those ten files to one attacker line
+// each — pass every gate green.
+test('driftBand keeps a floor for a source too small to absorb the slack', () => {
+    assert.deepEqual(driftBand(14), { low: 7, high: 48 });
+    assert.deepEqual(driftBand(15), { low: 8, high: 50 });
+    // Never below 1: a baseline of 1 must still trip on a collapse to 0 rather than banding
+    // down to a bound nothing can cross.
+    assert.deepEqual(driftBand(1), { low: 1, high: 22 });
 });
 
 test('checkDrift accepts counts inside the band', () => {
-    assert.doesNotThrow(() => checkDrift(URLS, observed(100, 219, 40), BASELINE));
+    assert.doesNotThrow(() => checkDrift(URLS, observed(100, 219, 50), BASELINE));
 });
 
 test('checkDrift rejects a source that suddenly carries far more', () => {
@@ -214,7 +225,18 @@ test('checkDrift rejects a source that suddenly carries far more', () => {
 });
 
 test('checkDrift rejects a source that has been gutted', () => {
-    assert.throws(() => checkDrift(URLS, observed(100, 39, 100), BASELINE), /gutted/);
+    assert.throws(() => checkDrift(URLS, observed(100, 49, 100), BASELINE), /gutted/);
+});
+
+// The case the old band could not see: a small source replaced wholesale by a handful of
+// attacker lines. With ten of the seventeen sources at a baseline of 14–15, this is the
+// cheap half of putting a chosen proxy at the head of every user's scan.
+test('checkDrift rejects a small source collapsed to a handful of links', () => {
+    const small = withCounts(15, 15, 15);
+
+    assert.throws(() => checkDrift(URLS, observed(15, 1, 15), small), /gutted/);
+    assert.throws(() => checkDrift(URLS, observed(15, 7, 15), small), /gutted/);
+    assert.doesNotThrow(() => checkDrift(URLS, observed(15, 8, 15), small));
 });
 
 // `src=` ids are positions in DEFAULT_SOURCES, so a reorder re-attributes every line of
