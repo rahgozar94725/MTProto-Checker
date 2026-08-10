@@ -26,6 +26,8 @@ import {
     serializeSources,
     setEnabled,
     shortUrl,
+    sourceOwner,
+    DEFAULT_SOURCE_OWNERS,
 } from '../../public/js/sources.js';
 import { SOURCES } from '../../scripts/build-snapshot.mjs';
 
@@ -410,6 +412,28 @@ for (const [name, score] of [
 test('shortUrl drops the raw.githubusercontent.com prefix and leaves anything else alone', () => {
     assert.equal(shortUrl(DEFAULT_SOURCES[0]), 'iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt');
     assert.equal(shortUrl(USER_URL), USER_URL);
+});
+
+// Who has to be compromised for a source to lie, which is not the same question as which
+// file the line came from. parseSnapshot counts publishers rather than files because ten of
+// the seventeen defaults are one account.
+test('sourceOwner reduces a source to the account that can rewrite it', () => {
+    assert.equal(sourceOwner(DEFAULT_SOURCES[0]), 'iwh3n');
+    assert.equal(sourceOwner(DEFAULT_SOURCES[6]), 'v2rayconfigspool');
+    assert.equal(sourceOwner(DEFAULT_SOURCES[15]), 'v2rayconfigspool',
+        'ten files, one account — that is the whole point');
+    assert.equal(sourceOwner(USER_URL), 'example.invalid', 'anything else is its host');
+    // Total, like everything else a stored value reaches: a string that is no URL at all is
+    // its own owner rather than a throw at module scope.
+    assert.equal(sourceOwner('not a url'), 'not a url');
+    assert.equal(sourceOwner(''), '');
+});
+
+test('DEFAULT_SOURCE_OWNERS is positional, so a src= id resolves to a publisher', () => {
+    assert.equal(DEFAULT_SOURCE_OWNERS.length, DEFAULT_SOURCES.length);
+    assert.deepEqual(DEFAULT_SOURCE_OWNERS, DEFAULT_SOURCES.map(sourceOwner));
+    assert.equal(new Set(DEFAULT_SOURCE_OWNERS).size, 8,
+        '17 sources, 8 accounts — update this number deliberately when the list changes');
 });
 
 // --- Task 10: what the scan order is built from -------------------------------------
