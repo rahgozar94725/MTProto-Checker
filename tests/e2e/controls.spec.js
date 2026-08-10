@@ -239,8 +239,20 @@ test.describe('every migrated control still fires', () => {
         await expect(page.locator('#sourcesList .source-row')).toHaveCount(DEFAULT_SOURCES.length);
         await expect(page.locator('#sourcesList input[type="checkbox"]').last()).toBeChecked();
 
-        // And restore puts a disabled built-in back on.
+        // Restore is the one irreversible control on the page, so it asks. Playwright dismisses
+        // an unhandled dialog, which is what makes the first click a real cancel test.
         await page.locator('#sourcesList input[type="checkbox"]').first().uncheck();
+        const asked = [];
+        page.on('dialog', (dialog) => {
+            asked.push(dialog.message());
+            return asked.length === 1 ? dialog.dismiss() : dialog.accept();
+        });
+
+        await page.locator('#restoreSourcesBtn').click();
+        await expect.poll(() => asked.length).toBe(1);
+        expect(asked[0]).toBe(T.confirmRestore);
+        await expect(page.locator('#sourcesList input[type="checkbox"]').first()).not.toBeChecked();
+
         await page.locator('#restoreSourcesBtn').click();
         await expect(page.locator('#sourcesList input[type="checkbox"]').first()).toBeChecked();
         await expect(page.locator('#console')).toContainText('restored to the built-in defaults');

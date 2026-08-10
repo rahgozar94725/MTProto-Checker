@@ -967,16 +967,45 @@ test('only a user-added source offers a remove button, and it removes', async ()
     }
 });
 
-test('restoring the defaults drops user sources and clears every score', async () => {
+// A list a user has been scoring for weeks, and the one action that throws it away.
+const SCORED_AND_ADDED = JSON.stringify([
+    { url: DEFAULT_SOURCES[0], enabled: false, score: { linksProvided: 10, linksWorking: 5, lastScan: 'once' } },
+    { url: USER_SOURCE, enabled: true },
+]);
+
+test('restoring the defaults asks first, in the active locale', async () => {
+    const app = await mountApp({ fetch: respondWith(''), storage: { sources: SCORED_AND_ADDED } });
+    try {
+        click(app, 'restoreSourcesBtn');
+
+        assert.deepEqual(app.recorded.confirms, [fa.confirmRestore]);
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('cancelling the restore leaves the list exactly as it was', async () => {
     const app = await mountApp({
         fetch: respondWith(''),
-        storage: {
-            sources: JSON.stringify([
-                { url: DEFAULT_SOURCES[0], enabled: false, score: { linksProvided: 10, linksWorking: 5, lastScan: 'once' } },
-                { url: USER_SOURCE, enabled: true },
-            ]),
-        },
+        storage: { sources: SCORED_AND_ADDED },
+        confirm: false,
     });
+    try {
+        const before = app.window.localStorage.getItem('sources');
+
+        click(app, 'restoreSourcesBtn');
+
+        assert.equal(sourceRows(app).length, DEFAULT_SOURCES.length + 1, 'the user source is still there');
+        assert.equal(sourceBoxes(app)[0].checked, false, 'and so is the disabled built-in');
+        assert.notEqual(sourceDetails(app)[0], fa.sourceUnscored, 'and its score');
+        assert.equal(app.window.localStorage.getItem('sources'), before, 'nothing was written');
+    } finally {
+        app.cleanup();
+    }
+});
+
+test('restoring the defaults drops user sources and clears every score', async () => {
+    const app = await mountApp({ fetch: respondWith(''), storage: { sources: SCORED_AND_ADDED } });
     try {
         click(app, 'restoreSourcesBtn');
 
