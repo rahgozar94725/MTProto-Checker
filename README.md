@@ -12,6 +12,7 @@ A powerful tool to verify **Telegram MTProto Proxies** by performing real protoc
 * **Go backend:** Powered by `gotd/td` — fast, stable, one ~21MB binary with no dependencies.
 * **Paste anything:** Dirty lists are cleaned automatically — mangled `tg://` / `https://t.me` links are fixed, spam secrets and invalid ports dropped — and no phone login is needed (public test keys).
 * **Three ways to load a list:** Paste it, pick a `.txt`/`.csv`/`.list` file, or drag one onto the input box.
+* **Built-in proxy list:** One click on **"Load list"** pulls a list rebuilt nightly from 17 public sources — the fresh copy over the network, the copy baked into the binary when the network is blocked. Sources can be added or switched off, they are ranked by how many working proxies they delivered, and the fetch can go through a SOCKS5 proxy.
 * **Pause & resume:** Interrupt a scan and continue where it left off without rechecking.
 * **Results ready to use:** Working proxies land in a table sorted by ping, with per-row copy, a plain-text view, and TXT/JSON export.
 * **Interface:** Dark & light themes, four languages (English, Persian, Russian, Chinese).
@@ -52,9 +53,10 @@ go build -o mtproto-checker .
 1.  **Get Proxies:** Copy your list of mixed/dirty MTProto proxies.
     > **Tip:** You can find a huge list of free proxies in [this repository](https://github.com/SoliSpirit/mtproto).
 2.  **Load the List:** Paste into the **"Input List"** box, click **"File"**, or drag a file onto the box.
-3.  **Start Check:** Click the **"Start Check"** button.
-4.  **Wait:** Invalid formats are filtered out first, then every proxy is checked concurrently and each result streams back the moment it lands. The four tiles above the input — progress, working, best ping, failed/skipped — update as it goes.
-5.  **Collect Results:** Working proxies appear in the results table, fastest first — copy a single row, click **"Copy Working List"**, or export as TXT/JSON.
+3.  **Or Load the Built-in List:** Click **"Load list"** to pull the nightly list built from 17 public sources — the network copy first, the copy baked into the binary if that is blocked. Open **"List sources"** to add your own URLs or turn sources off, and **"SOCKS5 proxy (optional)"** if the lists themselves are filtered where you are.
+4.  **Start Check:** Click the **"Start Check"** button.
+5.  **Wait:** Invalid formats are filtered out first, then every proxy is checked concurrently and each result streams back the moment it lands. The four tiles above the input — progress, working, best ping, failed/skipped — update as it goes.
+6.  **Collect Results:** Working proxies appear in the results table, fastest first — copy a single row, click **"Copy Working List"**, or export as TXT/JSON.
 
 ## 🔌 HTTP API
 
