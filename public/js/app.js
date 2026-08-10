@@ -725,17 +725,25 @@ async function loadSnapshot() {
         renderSnapshotMeta();
     }
 
-    // Deduped as one list rather than concatenated: two lists carrying the same proxy is the
-    // ordinary case, and the scan would otherwise be posted the same link twice.
-    const { proxies: loaded } = parseProxyList([snapshot ? snapshot.links.join('\n') : '', userText].join('\n'));
+    // Dropped on the snapshot's own links and *before* the merge, because attribution only
+    // exists for those: a proxy the user's own list also carries would otherwise match the
+    // disabled built-in that published it and be deleted, though an enabled source published
+    // it too. These lists overlap heavily, so that is the ordinary case, not a corner of one.
+    const { proxies: snapshotProxies } = parseProxyList(snapshot ? snapshot.links.join('\n') : '');
     // Applied at load time and nowhere else: after this the textarea is the truth, so a source
     // toggled off later does not reach back into a list the user is looking at.
-    const proxies = dropDisabledSources(loaded, {
+    const kept = dropDisabledSources(snapshotProxies, {
         attribution: state.snapshotAttribution,
         sources,
         sourceUrls: snapshotSourceUrls,
     });
-    const dropped = loaded.length - proxies.length;
+    // Deduped as one list rather than concatenated: two lists carrying the same proxy is the
+    // ordinary case, and the scan would otherwise be posted the same link twice.
+    const { proxies } = parseProxyList([kept.map(p => p.original).join('\n'), userText].join('\n'));
+    // Counted against what actually survived, not against what this step dropped: a link the
+    // user's own list put back is not a link they lost, and this number is what they are told.
+    const loadedKeys = new Set(proxies.map(proxyKey));
+    const dropped = snapshotProxies.filter(p => !loadedKeys.has(proxyKey(p))).length;
     // An error when it emptied the load, since the drawer opening is the only thing that
     // explains a button that appears to have done nothing.
     if (dropped > 0) log(`Dropped ${dropped} links published only by sources you disabled.`, proxies.length === 0);
