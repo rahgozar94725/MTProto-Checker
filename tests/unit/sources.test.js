@@ -12,6 +12,7 @@ import {
     DEFAULT_SOURCES,
     addSource,
     defaultSources,
+    dropDisabledSources,
     orderForScan,
     parseSources,
     rateBySourceId,
@@ -426,4 +427,69 @@ test('orderForScan does not mutate the list it was given', () => {
     orderForScan(list, { attribution: attributed([[b, 5, [0]]]) });
 
     assert.deepEqual(list, [a, b]);
+});
+
+// --- what a disabled source removes from a load ---------------------------------------
+
+// The user turned off the first built-in and nothing else.
+const FIRST_OFF = setEnabled(defaultSources(), DEFAULT_SOURCES[0], false);
+
+test('dropDisabledSources drops a proxy every source of which is disabled', () => {
+    const [a, b] = [px('192.0.2.1'), px('192.0.2.2')];
+    const attribution = attributed([[a, 1, [0]], [b, 1, [1]]]);
+
+    assert.deepEqual(
+        dropDisabledSources([a, b], { attribution, sources: FIRST_OFF, sourceUrls: HEADER }).map(p => p.server),
+        ['192.0.2.2']
+    );
+});
+
+test('dropDisabledSources keeps a proxy one of whose sources is still enabled', () => {
+    const a = px('192.0.2.1');
+    const attribution = attributed([[a, 2, [0, 1]]]);
+
+    assert.deepEqual(dropDisabledSources([a], { attribution, sources: FIRST_OFF, sourceUrls: HEADER }), [a]);
+});
+
+test('dropDisabledSources keeps a proxy the snapshot never attributed', () => {
+    const a = px('192.0.2.1');
+
+    assert.deepEqual(
+        dropDisabledSources([a], { attribution: new Map(), sources: FIRST_OFF, sourceUrls: HEADER }),
+        [a]
+    );
+});
+
+test('dropDisabledSources keeps a proxy whose only src id no header slot declares', () => {
+    const a = px('192.0.2.1');
+    const attribution = attributed([[a, 1, [9]]]);
+
+    assert.deepEqual(
+        dropDisabledSources([a], { attribution, sources: FIRST_OFF, sourceUrls: HEADER }), [a],
+        'a source the model cannot identify is not a source the user disabled'
+    );
+});
+
+test('dropDisabledSources keeps a proxy published by a source the model has never heard of', () => {
+    const a = px('192.0.2.1');
+    const attribution = attributed([[a, 1, [0]]]);
+    const header = ['nobody/has-this-list/main/proxies.txt'];
+
+    assert.deepEqual(dropDisabledSources([a], { attribution, sources: FIRST_OFF, sourceUrls: header }), [a]);
+});
+
+test('dropDisabledSources with nothing disabled returns the list as it is', () => {
+    const [a, b] = [px('192.0.2.1'), px('192.0.2.2')];
+    const attribution = attributed([[a, 1, [0]], [b, 1, [1]]]);
+
+    assert.deepEqual(
+        dropDisabledSources([a, b], { attribution, sources: defaultSources(), sourceUrls: HEADER }),
+        [a, b]
+    );
+});
+
+test('dropDisabledSources with no arguments at all keeps everything', () => {
+    const list = [px('192.0.2.1')];
+
+    assert.deepEqual(dropDisabledSources(list), list);
 });
