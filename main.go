@@ -231,13 +231,23 @@ func checkSOCKS5Destination(address string) error {
 		}
 		return nil
 	}
-	ips, err := cachedLookupHost(host)
+	// Deliberately not cachedLookupHost: that cache is written by tcpCheck from a
+	// hostname any /check caller supplies and holds it for five minutes whatever
+	// the record's own TTL says, so reading it here would let a caller seed an
+	// allowed answer and then repoint the name. The direct path has no such
+	// window — its check is the dialer's Control hook, which sees the address
+	// actually being dialled. This one has to buy the same freshness by
+	// resolving now, which costs at most maxSources lookups per request.
+	dnsCtx, dnsCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dnsCancel()
+	var resolver net.Resolver
+	ipAddrs, err := resolver.LookupIPAddr(dnsCtx, host)
 	if err != nil {
 		return nil
 	}
-	for _, ip := range ips {
-		if blockedSourceIP(ip) {
-			return errors.Errorf("blocked destination %s", ip)
+	for _, addr := range ipAddrs {
+		if blockedSourceIP(addr.IP) {
+			return errors.Errorf("blocked destination %s", addr.IP)
 		}
 	}
 	return nil
