@@ -543,6 +543,37 @@ const SNAPSHOT_URL = '/data/snapshot.txt';
 // Every list the server fetches on the page's behalf goes through here.
 const FETCH_SOURCES_URL = '/fetch-sources';
 
+// The optional proxy the server retries a failed direct fetch through. → undefined without an
+// address, which JSON.stringify drops entirely -- the same thing the server reads as
+// direct-only, and one fewer way for a half-filled form to mean something.
+//
+// The password is kept in localStorage in plaintext, which the drawer says in every locale.
+// There is nowhere better: the page has no backend session to hold it in, and the alternative
+// is retyping it on every load.
+function socks5Config() {
+    const addr = document.getElementById('socks5Addr').value.trim();
+    if (!addr) return undefined;
+
+    return {
+        addr,
+        user: document.getElementById('socks5User').value,
+        pass: document.getElementById('socks5Pass').value,
+    };
+}
+
+const SOCKS5_FIELDS = ['socks5Addr', 'socks5User', 'socks5Pass'];
+
+function saveSocks5() {
+    for (const id of SOCKS5_FIELDS) writeStored(id, document.getElementById(id).value);
+}
+
+function loadSocks5() {
+    for (const id of SOCKS5_FIELDS) {
+        const stored = readStored(id);
+        if (stored !== null) document.getElementById(id).value = stored;
+    }
+}
+
 // The ISO timestamp off the snapshot header, '' until a load succeeds. Kept here rather
 // than in the DOM so a language change can re-render the date in the new locale.
 let snapshotGeneratedAt = '';
@@ -570,7 +601,7 @@ async function fetchSources(urls) {
     const response = await fetch(FETCH_SOURCES_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls }),
+        body: JSON.stringify({ urls, socks5: socks5Config() }),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.text();
@@ -840,6 +871,9 @@ document.getElementById('exportTxtBtn').addEventListener('click', () => exportRe
 document.getElementById('exportJsonBtn').addEventListener('click', () => exportResults('json'));
 // One delegated listener, because renderSources() rebuilds every row wholesale -- the same
 // reason the per-row copy button is delegated onto #resultsBody.
+for (const id of SOCKS5_FIELDS) {
+    document.getElementById(id).addEventListener('change', saveSocks5);
+}
 document.getElementById('sourcesList').addEventListener('change', (e) => {
     const box = e.target.closest('input[type="checkbox"]');
     if (!box) return;
@@ -857,4 +891,5 @@ setTheme(currentTheme);
 updateStartBtn();
 renderSources();
 loadSettings();
+loadSocks5();
 if (soundCheck) syncSoundUI();
