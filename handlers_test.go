@@ -298,6 +298,42 @@ func TestRootServesTheEmbeddedPage(t *testing.T) {
 	}
 }
 
+// sameOriginOnly refuses a POST the browser labelled cross-origin, and a framed
+// page defeats that by borrowing this one: the frame's own origin is the app's,
+// so its fetches carry Sec-Fetch-Site: same-origin and a matching Origin and
+// Host, and every arm of the guard passes them. A clickjacking overlay then
+// reaches Load-list, Start and the one irreversible control on the page.
+func TestThePageRefusesToBeFramed(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newMux().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options = %q, want DENY", got)
+	}
+	// The header the modern browser reads. frame-ancestors is the load-bearing
+	// directive; a script-src policy is a separate change, because the paint
+	// bootstrap in <head> is inline and would need a nonce or a hash.
+	if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
+		t.Errorf("Content-Security-Policy = %q, want it to carry frame-ancestors 'none'", got)
+	}
+}
+
+// The page is the one thing here that is not JSON, and it is served from an
+// embed whose content types come from filename extensions alone.
+func TestTheEmbeddedPageCarriesItsOtherSecurityHeaders(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newMux().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/js/parse.js", nil))
+
+	for header, want := range map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"Referrer-Policy":        "no-referrer",
+	} {
+		if got := rec.Header().Get(header); got != want {
+			t.Errorf("%s = %q, want %q", header, got, want)
+		}
+	}
+}
+
 func TestEmbeddedModulesAreServed(t *testing.T) {
 	rec := httptest.NewRecorder()
 	newMux().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/js/parse.js", nil))

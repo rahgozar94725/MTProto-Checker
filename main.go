@@ -827,6 +827,30 @@ func recoverMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// staticHeaders stamps the embedded page with the headers a browser needs to
+// refuse the two things sameOriginOnly cannot.
+//
+// Framing is the load-bearing one. The guard refuses a POST the browser labelled
+// cross-origin, but a page framed in an attacker's site keeps *this* origin: its
+// fetches carry Sec-Fetch-Site: same-origin, a matching Origin and a matching
+// Host, so every arm of the guard passes them. An overlay over the real page
+// therefore reaches Load-list, Start and restore-defaults — routing around the
+// guard by borrowing the page it protects rather than by defeating it.
+// X-Frame-Options is there for browsers predating frame-ancestors.
+//
+// The policy deliberately carries no script-src: the paint bootstrap in <head>
+// is inline, so a script policy needs a nonce or a hash, which is a change to
+// index.html and its boot test — worth doing, separately.
+func staticHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // newMux wires the three endpoints and the embedded static files. Split out of
 // main() so handlers_test.go can drive them with httptest instead of a live
 // listener; main() adds nothing but the server, signals and browser launch.
@@ -1214,7 +1238,7 @@ func newMux() *http.ServeMux {
 	if err != nil {
 		log.Fatalf("Failed to embed public directory: %v", err)
 	}
-	mux.Handle("/", http.FileServer(http.FS(embeddedFS)))
+	mux.Handle("/", staticHeaders(http.FileServer(http.FS(embeddedFS))))
 
 	return mux
 }
