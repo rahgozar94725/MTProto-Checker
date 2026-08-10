@@ -21,6 +21,14 @@ import { proxyKey } from './parse.js';
 
 export const RAW_PREFIX = 'https://raw.githubusercontent.com/';
 
+// Where the nightly rebuild is published: .github/workflows/snapshot.yml force-pushes the file
+// to the orphan `snapshot` branch, and release.yml curls the same URL into public/data/ before
+// building. The button fetches it through the server (POST /fetch-sources) rather than from the
+// page, because the browser is on the network that made the checker necessary in the first
+// place — and because raw.githubusercontent.com serves no CORS headers a page could use.
+export const SNAPSHOT_SOURCE_URL =
+    `${RAW_PREFIX}rahgozar94725/MTProto-Checker/snapshot/snapshot.txt`;
+
 export const DEFAULT_SOURCES = [
     `${RAW_PREFIX}iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt`,
     `${RAW_PREFIX}Argh94/Proxy-List/main/MTProto.txt`,

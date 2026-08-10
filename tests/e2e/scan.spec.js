@@ -179,3 +179,73 @@ test.describe('full scan against the real server', () => {
         for (const host of hosts) expect(host).toBe('127.0.0.1');
     });
 });
+
+// The Load-list button's first step is POST /fetch-sources, which is the server dialling out on
+// the page's behalf. Every test here stubs that route, so the browser stays on 127.0.0.1 and the
+// server never leaves the machine either.
+test.describe('the load-list button against its three network conditions', () => {
+    const LIVE_LINK = 'tg://proxy?server=198.51.100.70&port=443&secret=ee7a8b9c0d1e2f3a4b5c6d7e8f901a2b';
+    const LIVE_SNAPSHOT = [
+        '# generated 2026-08-10T02:00:00.000Z by scripts/build-snapshot.mjs',
+        '# 0 iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt',
+        `${LIVE_LINK}#seen=3;src=0`,
+        '',
+    ].join('\n');
+
+    async function stubFetchSources(page, respond) {
+        await page.route('**/fetch-sources', respond);
+    }
+
+    test('a reachable snapshot branch fills the textarea from the live list', async ({ page }) => {
+        const hosts = trackHosts(page);
+        await stubFetchSources(page, (route) => route.fulfill({
+            status: 200,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            body: LIVE_SNAPSHOT,
+        }));
+        await page.goto('/');
+
+        await page.locator('#loadListBtn').click();
+        await expect(page.locator('#inputProxies')).toHaveValue(LIVE_LINK);
+        await expect(page.locator('#toast')).toHaveClass('toast show success');
+        await expect(page.locator('#console')).toContainText('nightly list');
+
+        for (const host of hosts) expect(host).toBe('127.0.0.1');
+    });
+
+    test('an unreachable snapshot branch falls back to the list baked into the binary', async ({ page }) => {
+        const hosts = trackHosts(page);
+        // What the real handler answers when it could not reach the source: 200, and nothing in
+        // the body. A source that failed is skipped, not turned into a failed request.
+        await stubFetchSources(page, (route) => route.fulfill({ status: 200, body: '' }));
+        await page.goto('/');
+
+        await page.locator('#loadListBtn').click();
+        await expect(page.locator('#inputProxies')).not.toHaveValue('');
+        await expect(page.locator('#inputProxies')).not.toHaveValue(LIVE_LINK);
+        await expect(page.locator('#toast')).toHaveClass('toast show success');
+        await expect(page.locator('#console')).toContainText('built-in list');
+
+        for (const host of hosts) expect(host).toBe('127.0.0.1');
+    });
+
+    test('both steps failing toasts an error and leaves the paste alone', async ({ page }) => {
+        const hosts = trackHosts(page);
+        // What the real handler answers when it could not reach the source: 200, and nothing in
+        // the body. A source that failed is skipped, not turned into a failed request.
+        await stubFetchSources(page, (route) => route.fulfill({ status: 200, body: '' }));
+        // The embed is stubbed away too, which is the only way to reach the both-fail path from
+        // a binary that always carries a usable copy.
+        await page.route('**/data/snapshot.txt', (route) => route.fulfill({ status: 404, body: '' }));
+        await page.goto('/');
+
+        await page.locator('#inputProxies').fill(P10);
+        await page.locator('#loadListBtn').click();
+
+        await expect(page.locator('#toast')).toHaveClass('toast show error');
+        await expect(page.locator('#inputProxies')).toHaveValue(P10);
+        await expect(page.locator('#consoleDrawer')).toHaveAttribute('open', '');
+
+        for (const host of hosts) expect(host).toBe('127.0.0.1');
+    });
+});
