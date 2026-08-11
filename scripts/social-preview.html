@@ -1,0 +1,263 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>MTProto Checker — social preview</title>
+<!--
+  Source of images/social-preview.png, the card GitHub shows wherever a link to
+  this repo is unfurled. Rendered by scripts/social-preview.mjs at 1280x640 CSS
+  px, 2x. Open this file directly in a browser to eyeball a change before
+  re-rendering.
+
+  Colours are the dark-theme values from public/css/tokens.css and the ping
+  bands are the .p-fast/.p-mid/.p-slow thresholds from public/js/format.js, so
+  the card keeps matching the app. The addresses are the TEST-NET-1 ones from
+  tests/fixtures/sse-progress.txt: no live proxy has ever appeared in an image
+  in this repo, and that holds here too.
+
+  English on purpose. This card is unfurled on GitHub, in search results and in
+  every chat where the repo link is shared, not only in a Persian-speaking one.
+-->
+<style>
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 700;
+    src: url('../public/fonts/inter/inter-latin.woff2') format('woff2');
+}
+
+:root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --muted: #94a3b8;
+    --accent: #3b82f6;
+    --accent-2: #6366f1;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --border: #475569;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    width: 1280px;
+    height: 640px;
+    background: var(--bg);
+    font-family: 'Inter', system-ui, sans-serif;
+    color: var(--text);
+    overflow: hidden;
+    position: relative;
+}
+
+/* The blue-to-indigo of the Start button, bled into two corners so the flat
+   navy does not read as an empty slide. */
+body::before {
+    content: '';
+    position: absolute;
+    inset: -220px auto auto -220px;
+    width: 720px;
+    height: 720px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.28), transparent 62%);
+}
+
+body::after {
+    content: '';
+    position: absolute;
+    inset: auto -260px -300px auto;
+    width: 760px;
+    height: 760px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.22), transparent 62%);
+}
+
+.page {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    padding: 64px 72px;
+    display: flex;
+    align-items: center;
+    gap: 56px;
+}
+
+.left { width: 620px; flex: none; }
+
+.mark {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 26px;
+}
+
+.shield {
+    width: 68px;
+    height: 68px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 12px 32px rgba(59, 130, 246, 0.35);
+}
+
+.shield svg { width: 36px; height: 36px; }
+
+.eyebrow {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+h1 {
+    font-size: 68px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
+    margin-bottom: 20px;
+}
+
+.tagline {
+    font-size: 27px;
+    line-height: 1.42;
+    color: var(--text-secondary);
+    margin-bottom: 34px;
+}
+
+.tagline b { color: var(--text); font-weight: 600; }
+
+/* Held to two even rows on purpose — at full width the fourth chip drops alone
+   and the block reads as a mistake. */
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 38px;
+    max-width: 596px;
+}
+
+.chip {
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: rgba(51, 65, 85, 0.72);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 10px 20px;
+}
+
+.repo {
+    font-size: 21px;
+    font-weight: 500;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.repo svg { width: 24px; height: 24px; fill: var(--muted); }
+
+/* A miniature of the real results panel: same card, same border, same three
+   ping bands. */
+.panel {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 26px 28px 28px;
+    box-shadow: 0 28px 64px rgba(2, 6, 23, 0.55);
+}
+
+.panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 22px;
+}
+
+.panel-title { font-size: 22px; font-weight: 600; }
+
+.panel-count { font-size: 18px; color: var(--success); font-weight: 600; }
+
+.row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 16px;
+    border-radius: 13px;
+    background: rgba(51, 65, 85, 0.45);
+    margin-bottom: 11px;
+}
+
+.row:last-of-type { margin-bottom: 0; }
+
+.addr {
+    font-size: 21px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+.badge {
+    font-size: 18px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 6px 15px;
+}
+
+.p-fast { background: rgba(16, 185, 129, 0.18); color: var(--success); }
+.p-mid  { background: rgba(245, 158, 11, 0.18); color: var(--warning); }
+.p-slow { background: rgba(239, 68, 68, 0.16); color: var(--error); }
+
+.panel-foot {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(71, 85, 105, 0.55);
+    font-size: 18px;
+    color: var(--muted);
+    line-height: 1.45;
+}
+</style>
+
+<div class="page">
+    <div class="left">
+        <div class="mark">
+            <div class="shield">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2.6 4.3 6v6c0 4.6 3.2 8.4 7.7 9.4 4.5-1 7.7-4.8 7.7-9.4V6L12 2.6Z"/>
+                    <path d="m8.6 12.1 2.4 2.4 4.5-4.6"/>
+                </svg>
+            </div>
+            <div class="eyebrow">Telegram proxy checker</div>
+        </div>
+
+        <h1>MTProto&nbsp;Checker</h1>
+
+        <p class="tagline">A <b>real MTProto handshake</b> through every proxy &mdash; not a TCP ping. If it passes here, Telegram connects.</p>
+
+        <div class="chips">
+            <span class="chip">Built-in nightly list</span>
+            <span class="chip">Pause &amp; resume</span>
+            <span class="chip">SOCKS5 support</span>
+            <span class="chip">Single 21 MB binary</span>
+        </div>
+
+        <div class="repo">
+            <svg viewBox="0 0 16 16"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.34c-2.23.48-2.7-1.07-2.7-1.07-.36-.93-.89-1.18-.89-1.18-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+            github.com/rahgozar94725/MTProto-Checker
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Working proxies</span>
+            <span class="panel-count">3 / 4</span>
+        </div>
+
+        <div class="row"><span class="addr">192.0.2.10:443</span><span class="badge p-fast">120 ms</span></div>
+        <div class="row"><span class="addr">192.0.2.12:443</span><span class="badge p-mid">240 ms</span></div>
+        <div class="row"><span class="addr">192.0.2.13:443</span><span class="badge p-slow">480 ms</span></div>
+
+        <div class="panel-foot">Sorted by ping. Copy a row, copy the list, or export TXT / JSON.</div>
+    </div>
+</div>
