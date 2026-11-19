@@ -4,7 +4,7 @@ name: Snapshot
 # to the orphan branch `snapshot`. Release builds curl that branch into public/data/
 # before compiling, so the binary ships a snapshot no older than the release.
 #
-# Deliberately no `push` trigger: the snapshot is a function of the 17 remote source
+# Deliberately no `push` trigger: the snapshot is a function of the 16 remote source
 # lists, not of this repository's contents, so a commit here is not a reason to rebuild.
 # The other half of that containment lives in test.yml, whose push trigger ignores the
 # `snapshot` branch — without it every nightly bot commit would run the whole matrix.
@@ -16,10 +16,22 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
 
+# The force-push below rebuilds the branch's history from scratch, so two overlapping runs
+# (a late scheduled start and a manual dispatch) would race and the later-finishing push
+# could land the staler snapshot. One writer at a time; a queued dispatch cancels the
+# scheduled run it arrives during rather than waiting a full day behind it.
+concurrency:
+  group: snapshot
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build and publish the snapshot
     runs-on: ubuntu-latest
+    # Scheduled workflows run on every fork's default branch too; this job exists to serve
+    # this repository's release pipeline, so everywhere else it is a no-op instead of a
+    # nightly runner bill and a mystery entry in the fork's Actions tab.
+    if: github.repository == 'rahgozar94725/MTProto-Checker'
     # Scoped to the one job that pushes rather than declared at the workflow level, so a
     # step added to a future job does not inherit write access it was never meant to have.
     permissions:

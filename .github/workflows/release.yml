@@ -4,6 +4,13 @@ on:
   push:
     tags: [ 'v*' ]
 
+# Never cancelled: a release build is not superseded by a newer tag the way a test run is
+# superseded by a newer commit — each tag deserves its published binaries. The group only
+# serializes, so two tags pushed together queue instead of racing the artifact uploads and
+# the release job.
+concurrency:
+  group: release
+
 jobs:
   build:
     # Scoped per job rather than declared at the workflow level: only the release

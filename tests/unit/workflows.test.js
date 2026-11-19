@@ -268,3 +268,26 @@ test('the go job runs the suite under the race detector, after gofmt', () => {
     // failing step, so the slow one going first would let it mask a formatting failure.
     assert.ok(go.indexOf('gofmt -l .') < raceAt, 'gofmt has to run before the race step');
 });
+
+// Two overlapping snapshot runs force-push the same rebuildable history, and the later-
+// finishing push can land the staler file — the checksum pair stays consistent either way,
+// so nothing red would ever flag it. test.yml's group is per-ref: a burst of pushes only
+// needs the newest commit's result, and different branches must not cancel each other.
+test('the workflows declare the concurrency their failure modes need', () => {
+    const snapshot = workflow('snapshot.yml');
+
+    assert.match(snapshot, /^concurrency:\n  group: snapshot\n  cancel-in-progress: true$/m,
+        'a late scheduled start and a manual dispatch would race the force-push');
+    // Scheduled workflows run on every fork too; the job exists only for this repository.
+    assert.match(snapshot, /^\s+if: github\.repository == 'rahgozar94725\/MTProto-Checker'$/m,
+        'the nightly job would bill every fork\'s runner minutes');
+
+    assert.match(workflow('test.yml'),
+        /^concurrency:\n  group: test-\$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}\n  cancel-in-progress: true$/m,
+        'a burst of pushes would run the whole matrix once per commit');
+
+    // Deliberately no cancel-in-progress: a release build is not superseded by a newer
+    // tag — each tag deserves its published binaries, so the group only serializes.
+    assert.match(workflow('release.yml'), /^concurrency:\n  group: release$/m,
+        'two tags pushed together would race the artifact uploads');
+});

@@ -18,6 +18,12 @@ on:
 permissions:
   contents: read
 
+# One run per branch: a fast burst of pushes only needs the newest commit's result,
+# so the runner minutes the superseded runs would burn are pure waste.
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   js:
     name: JS unit tests
