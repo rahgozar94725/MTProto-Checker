@@ -187,7 +187,7 @@ test.describe('the load-list button against its three network conditions', () =>
     const LIVE_LINK = 'tg://proxy?server=198.51.100.70&port=443&secret=ee7a8b9c0d1e2f3a4b5c6d7e8f901a2b';
     const LIVE_SNAPSHOT = [
         '# generated 2026-08-10T02:00:00.000Z by scripts/build-snapshot.mjs',
-        '# 0 iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt',
+        '# 0 Argh94/Proxy-List/main/MTProto.txt',
         `${LIVE_LINK}#seen=3;src=0`,
         '',
     ].join('\n');

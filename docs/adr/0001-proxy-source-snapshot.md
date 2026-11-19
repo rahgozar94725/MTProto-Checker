@@ -9,7 +9,7 @@
 
 Until now the tool did nothing until the user pasted a list. Finding one is the hard part
 of the job, and the people who need the tool are the people whose network is most likely to
-block the places the lists live: `raw.githubusercontent.com` serves the seventeen public
+block the places the lists live: `raw.githubusercontent.com` serves the public
 lists this project draws on, and it is not reliably reachable from inside a filtered region.
 It also serves no CORS headers, so a page cannot fetch it directly even where the network
 allows it.
@@ -24,7 +24,7 @@ server rather than the page.
 
 ```
 nightly (GitHub Actions, unfiltered)
-    17 sources → parse with public/js/parse.js → dedupe → snapshot.txt
+    6 sources → parse with public/js/parse.js → dedupe → snapshot.txt
     → force-push to the orphan branch `snapshot`
 
 release (v* tag)
@@ -38,7 +38,7 @@ runtime ("Load list")
     → the textarea is filled; the user presses Start
 ```
 
-The load-bearing property is that **the client fetches one URL, not seventeen**. Aggregation
+The load-bearing property is that **the client fetches one URL, not one per source**. Aggregation
 is CI's job, and CI is not filtered. The second load-bearing property is that the fetch
 happens in the Go process, which is subject to neither CORS nor the browser's network
 policy, and which can be pointed at a SOCKS5 proxy the user already runs.
@@ -193,7 +193,7 @@ That spread is what the per-source score and the enable/disable toggle are for.
   vantage point as truth and silently discard exactly the proxies most likely to matter.
   Redundancy metadata is shipped instead, and liveness is decided on the user's machine —
   which is what this tool is.
-- **Rewriting source URLs to a mirror.** Sending the seventeen sources through a proxying
+- **Rewriting source URLs to a mirror.** Sending the sources through a proxying
   mirror (`ghproxy` and friends) so the page could fetch them directly. Rejected: it makes
   the tool depend on a third party nobody here controls, one that can log every user, and it
   does not remove the CORS problem. The user's own SOCKS5 proxy solves the same problem with

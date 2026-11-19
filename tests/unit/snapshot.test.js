@@ -80,22 +80,28 @@ test('parseSnapshot keeps a src id that no header line declares, and does not co
     assert.equal(sources[99], undefined);
 });
 
-// The attack the owner mapping closes. Ten of the seventeen defaults are one GitHub account
-// (V2RAYCONFIGSPOOL, ids 6–15), so writing one line into all ten of that account's files is a
-// single compromise that used to mint seen=10 — above essentially every legitimately
-// redundant proxy, and orderForScan sorts on seen before source score.
-test('parseSnapshot counts distinct publishers, not distinct files', () => {
-    const oneAccount = `${SHARED_LINK}#seen=10;src=6,7,8,9,10,11,12,13,14,15`;
+// The attack the owner mapping closes. If one GitHub account owns several defaults, writing
+// one line into all of that account's files is a single compromise that would mint seen=N —
+// above essentially every legitimately redundant proxy, and orderForScan sorts on seen before
+// source score. No current default shares an account, but the owner mapping is derived from
+// DEFAULT_SOURCES, so appending such a source re-arms this guard without another change.
+test('parseSnapshot counts distinct publishers, not distinct ids', () => {
+    const repeated = `${SHARED_LINK}#seen=1;src=0,0`;
 
-    assert.deepEqual(parseSnapshot(oneAccount).attribution.get(SHARED_KEY),
-        { seen: 1, srcs: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
+    assert.deepEqual(parseSnapshot(repeated).attribution.get(SHARED_KEY),
+        { seen: 1, srcs: [0] }, 'the repeated id is collapsed in srcs too');
+
+    const distinct = `${SHARED_LINK}#seen=3;src=0,1,2`;
+
+    assert.deepEqual(parseSnapshot(distinct).attribution.get(SHARED_KEY),
+        { seen: 3, srcs: [0, 1, 2] });
 });
 
 test('parseSnapshot counts a publisher once however many of its files carried the proxy', () => {
-    const mixed = `${SHARED_LINK}#seen=4;src=0,6,7,99`;
+    const mixed = `${SHARED_LINK}#seen=3;src=0,1,99`;
 
     assert.deepEqual(parseSnapshot(mixed).attribution.get(SHARED_KEY),
-        { seen: 2, srcs: [0, 6, 7, 99] }, 'iwh3n and V2RAYCONFIGSPOOL — 99 is not a publisher this reader knows');
+        { seen: 2, srcs: [0, 1, 99] }, 'Argh94 and Kira00011 — 99 is not a publisher this reader knows');
 });
 
 test('parseSnapshot accepts a plain link and records no attribution for it', () => {
@@ -115,7 +121,7 @@ test('parseSnapshot drops a line whose fragment is not the snapshot grammar', ()
 // `sources[id] = url` on a sparse array, with `id` read straight off the file: an unbounded
 // index lets a compromised snapshot branch hand every later reader — rateBySourceId() on the
 // way into a scan, above all — a four-billion-slot walk. The page loads and then freezes on
-// Start. Four digits is well past the 17 real sources, and an id that overruns it fails the
+// Start. Four digits is an order of magnitude past the 6 real sources, and an id that overruns it fails the
 // match outright, which is the same as any other comment line.
 test('parseSnapshot ignores a source id too long to be one', () => {
     const { sources } = parseSnapshot(`# 4294967294 evil/list.txt\n${SHARED_LINK}`);

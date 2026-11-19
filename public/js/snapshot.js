@@ -27,7 +27,7 @@ const GENERATED_RE = /^#\s*generated\s+(\S+)/;
 // The index is bounded because `sources[Number(id)] = url` on a sparse array is an allocation
 // the header controls: `# 4294967294 x` gives every later read of that array a four-billion
 // slot walk, and rateBySourceId() maps over it on the way into a scan — the page loads and
-// then freezes on Start. Four digits is an order of magnitude past the 17 real sources, and a
+// Start. Four digits is an order of magnitude past the 6 real sources, and a
 // line that overruns it fails the match entirely, which parseSnapshot already treats as a
 // comment. Only reachable through a compromised snapshot branch, and it costs nothing.
 const SOURCE_RE = /^#\s*(\d{1,4})\s+(\S+)/;

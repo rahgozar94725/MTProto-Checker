@@ -859,7 +859,7 @@ func TestFetchSourcesBoundsTheWholeRequestByASharedBudget(t *testing.T) {
 	}
 
 	// A request that fits arrives whole: the budget must not cost a legitimate
-	// caller anything. The real corpus is ~233 KB across 17 sources, so this is
+	// caller anything. The real corpus is ~110 KB across 6 sources, so this is
 	// already an order of magnitude past anything that happens in practice.
 	t.Run("within budget", func(t *testing.T) {
 		const n = 3

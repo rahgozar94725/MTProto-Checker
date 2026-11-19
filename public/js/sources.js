@@ -37,26 +37,15 @@ export const SNAPSHOT_SOURCE_URL =
     `${RAW_PREFIX}rahgozar94725/MTProto-Checker/snapshot/snapshot.txt`;
 
 export const DEFAULT_SOURCES = [
-    `${RAW_PREFIX}iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt`,
     `${RAW_PREFIX}Argh94/Proxy-List/main/MTProto.txt`,
     `${RAW_PREFIX}Kira00011/MTProto/main/all_proxies.txt`,
     `${RAW_PREFIX}SoliSpirit/mtproto/master/all_proxies.txt`,
     `${RAW_PREFIX}Therealwh/MTPproxyLIST/refs/heads/main/verified/proxy_all_verified.txt`,
     `${RAW_PREFIX}kort0881/telegram-proxy-collector/main/proxy_all.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no1.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no2.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no3.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no4.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no5.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no6.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no7.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no8.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no9.txt`,
-    `${RAW_PREFIX}V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/main/telegram_proxy_no10.txt`,
     `${RAW_PREFIX}FLAT447/v2ray-lists/refs/heads/main/blacklist.txt`,
 ];
 
-// How a snapshot header names a source: `# 0 iwh3n/tg-proxy/…`. It lives here rather than in
+// How a snapshot header names a source: `# 0 Argh94/Proxy-List/…`. It lives here rather than in
 // scripts/build-snapshot.mjs (which imports it) because recordScan joins a header back onto
 // this model and both sides have to shorten a URL the same way.
 export function shortUrl(url) {
@@ -64,9 +53,11 @@ export function shortUrl(url) {
 }
 
 // Who has to be compromised for a source to start lying — which is not the same question as
-// which file a line came from, and the two answers differ by a factor of ten here. Ten of the
-// seventeen defaults are `V2RAYCONFIGSPOOL/TELEGRAM_PROXY_SUB/…/telegram_proxy_no{1..10}.txt`:
-// one account, ten `src=` ids. parseSnapshot counts publishers rather than ids because `seen`
+// which file a line came from. No current default shares an account with another, but the
+// nightly rebuild is free to append one that does (the list it replaced had one account on
+// ten files), and a single compromise writing the same line into all of that account's files
+// would otherwise mint `seen=10` — above essentially every legitimately redundant proxy.
+// parseSnapshot counts publishers rather than ids because `seen`
 // is the first scan-order key, so counting files let a single account mint `seen=10` and pin a
 // proxy of its choice to the head of every user's next scan.
 //

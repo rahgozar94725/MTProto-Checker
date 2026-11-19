@@ -31,7 +31,7 @@ import { DEFAULT_SOURCES, shortUrl } from '../public/js/sources.js';
 
 // Source ids are positional: index 3 there is `src=3` in every line of the snapshot, so
 // appending is safe and reordering is not. Phase 0 measured this exact order. The list lives
-// in public/js/sources.js because the UI's source model needs the same 17 defaults, and two
+// in public/js/sources.js because the UI's source model needs the same 16 defaults, and two
 // copies that drifted apart would misattribute every line of the snapshot.
 export const SOURCES = DEFAULT_SOURCES;
 
@@ -101,7 +101,7 @@ export function snapshotLines(universe) {
         .map(([, entry]) => formatLine(entry.link, entry.srcs));
 }
 
-// The volume drift guard. The 17 sources are third-party repositories fetched by mutable
+// The volume drift guard. The 16 sources are third-party repositories fetched by mutable
 // branch ref, and this snapshot is embedded into every release binary and loaded into the
 // user's textarea by one click — so a takeover of any one of them is a position to put
 // attacker-operated proxies in front of every user, and "it parsed" is not evidence of
@@ -117,7 +117,7 @@ export function snapshotLines(universe) {
 // appended to keeps its count and passes. Catching that needs a churn comparison against the
 // previous snapshot, which is a separate change.
 // The slack term is on the high side only, and that asymmetry is the point. Subtracted on the
-// low side it erased the band for every source too small to absorb it: ten of the seventeen
+// low side it erased the band for every source too small to absorb it: ten of the sixteen
 // defaults carry 14–15 links, `ceil((14 - 20) / 2)` is -3, and `unique < low` can never be
 // true — so those ten had no lower bound at all and their only floor was the empty-source
 // check below. That is the cheap half of the attack this guard exists to catch: set each of

@@ -46,8 +46,8 @@ const (
 	// maxBodySize leaves headroom above that. Exceeding either → 413.
 	maxBodySize  = 8 * 1024 * 1024
 	maxBatchSize = 10_000
-	// A public proxy list is tens of KiB; the whole 17-source corpus is
-	// ~233 KB. 1 MiB per source is far above anything plausible and is
+	// A public proxy list is tens of KiB; the whole 6-source corpus is
+	// ~110 KB. 1 MiB per source is far above anything plausible and is
 	// enforced while reading, so an endless response is cut off, not buffered.
 	//
 	// maxSourceBytes alone bounds nothing useful: /fetch-sources buffers every

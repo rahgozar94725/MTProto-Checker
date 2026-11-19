@@ -38,15 +38,15 @@ const COMMENTED = '198.51.100.7:443:ee1112131415161718191a1b1c1d1e1f20';
 
 const body = text => text.split('\n').filter(l => l && !l.startsWith('#'));
 
-test('SOURCES is the 17 raw.githubusercontent.com URLs, each listed once', () => {
-    assert.equal(SOURCES.length, 17);
-    assert.equal(new Set(SOURCES).size, 17);
+test('SOURCES is the 6 raw.githubusercontent.com URLs, each listed once', () => {
+    assert.equal(SOURCES.length, 6);
+    assert.equal(new Set(SOURCES).size, 6);
     assert.deepEqual(SOURCES.filter(u => !u.startsWith('https://raw.githubusercontent.com/')), []);
 });
 
 test('shortUrl drops the raw.githubusercontent.com prefix', () => {
-    assert.equal(shortUrl('https://raw.githubusercontent.com/iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt'),
-        'iwh3n/tg-proxy/refs/heads/main/proxys/All_Proxys.txt');
+    assert.equal(shortUrl('https://raw.githubusercontent.com/Argh94/Proxy-List/main/MTProto.txt'),
+        'Argh94/Proxy-List/main/MTProto.txt');
 });
 
 test('collect dedupes across sources and accumulates the source set', () => {
