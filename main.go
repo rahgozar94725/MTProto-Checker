@@ -421,15 +421,31 @@ var sharedSession = &session.StorageMemory{}
 // rule on sharedSession.
 var checkOptionsHook func(*telegram.Options)
 
+// exchangeTimeout derives the DH key-exchange budget from the caller's
+// timeout. Only the FIRST check of a run performs an exchange — later checks
+// reuse the auth key from sharedSession — so a larger budget only ever slows
+// the first check down. The budget was a hard 2s, decoupled from the caller's
+// timeout: on a slow network the first exchange could never complete, the key
+// was never cached, and every check in the run failed while the UI timeout
+// claimed it had been raised (the issue #28 signature). The floor keeps
+// failure snappy at the minimum timeout; a caller who raises the timeout
+// raises the exchange budget with it.
+func exchangeTimeout(timeoutSec int) time.Duration {
+	if d := time.Duration(timeoutSec) * time.Second / 3; d > 2*time.Second {
+		return d
+	}
+	return 2 * time.Second
+}
+
 // newCheckOptions returns client options for one proxy check. All checks share
 // sharedSession deliberately — a real Telegram client also reuses its auth key
 // rather than running a fresh key exchange per connection.
-func newCheckOptions(resolver dcs.Resolver) telegram.Options {
+func newCheckOptions(resolver dcs.Resolver, timeoutSec int) telegram.Options {
 	opts := telegram.Options{
 		Resolver:        resolver,
 		SessionStorage:  sharedSession,
 		DialTimeout:     minTimeoutDuration,
-		ExchangeTimeout: 2 * time.Second,
+		ExchangeTimeout: exchangeTimeout(timeoutSec),
 		NoUpdates:       true,
 		Device:          telegram.DeviceTDesktopWindows(),
 	}
@@ -453,6 +469,39 @@ func tcpCheck(server string, port int) error {
 	return nil
 }
 
+// coldStartRetryBudget grants ONE extra full-length attempt per scan to the
+// cold-start case: every check in a run fails because the shared auth key was
+// never negotiated (the first exchange hit a transient network window), the
+// session is still empty, and every subsequent check inherits that failure.
+// Batch endpoints refill the budget to 1 at scan start; the single /check
+// endpoint leaves it as the caller set it, because one caller, one check, and
+// a retry would just double the caller's own latency.
+var coldStartRetryBudget atomic.Int32
+
+// claimColdStartRetry reports whether this failure may spend the one retry.
+// The budget is refilled by the batch endpoints at scan start and spent at
+// most once per scan, so an all-dead list pays at most one extra timeout, not
+// one per proxy.
+func claimColdStartRetry() bool {
+	return coldStartRetryBudget.CompareAndSwap(1, 0)
+}
+
+// sessionEmpty reports whether the shared auth key has been negotiated yet.
+// An empty session after a failed check is the cold-start signature: without
+// a key every later check in the run must redo the exchange and fail too.
+func sessionEmpty() bool {
+	data, err := sharedSession.Bytes(nil)
+	return err == nil && len(data) == 0
+}
+
+// coldStartRetryable: only a deadline-exceeded failure can be a slow first
+// exchange. A cancelled context (immediate), a decode error (pre-dial) or a
+// refused connection (fast) is not a budget problem, and retrying it would
+// double a caller's latency for nothing.
+func coldStartRetryable(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded)
+}
+
 func checkProxy(ctx context.Context, server string, port int, secret string, timeoutSec int) (ping int64, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -461,47 +510,56 @@ func checkProxy(ctx context.Context, server string, port int, secret string, tim
 		}
 	}()
 
-	addr := net.JoinHostPort(server, fmt.Sprintf("%d", port))
+	runOnce := func() (int64, error) {
+		addr := net.JoinHostPort(server, fmt.Sprintf("%d", port))
 
-	decodedSecret, err := decodeSecret(secret)
-	if err != nil {
-		return 0, errors.Wrap(err, "decode secret")
-	}
-
-	resolver, err := dcs.MTProxy(addr, decodedSecret, dcs.MTProxyOptions{})
-	if err != nil {
-		return 0, errors.Wrap(err, "create MTProxy resolver")
-	}
-
-	client := telegram.NewClient(testAppID, testAppHash, newCheckOptions(resolver))
-
-	checkCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
-	defer cancel()
-
-	var pingResult int64
-	err = client.Run(checkCtx, func(ctx context.Context) error {
-		start := time.Now()
-		_, apiErr := client.API().HelpGetNearestDC(ctx)
-		if apiErr != nil {
-			return errors.Wrap(apiErr, "help.getNearestDC")
+		decodedSecret, err := decodeSecret(secret)
+		if err != nil {
+			return 0, errors.Wrap(err, "decode secret")
 		}
-		pingResult = time.Since(start).Milliseconds()
-		return nil
-	})
-	if err != nil {
-		return 0, err
+
+		resolver, err := dcs.MTProxy(addr, decodedSecret, dcs.MTProxyOptions{})
+		if err != nil {
+			return 0, errors.Wrap(err, "create MTProxy resolver")
+		}
+
+		client := telegram.NewClient(testAppID, testAppHash, newCheckOptions(resolver, timeoutSec))
+
+		checkCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+		defer cancel()
+
+		var pingResult int64
+		runErr := client.Run(checkCtx, func(ctx context.Context) error {
+			start := time.Now()
+			_, apiErr := client.API().HelpGetNearestDC(ctx)
+			if apiErr != nil {
+				return errors.Wrap(apiErr, "help.getNearestDC")
+			}
+			pingResult = time.Since(start).Milliseconds()
+			return nil
+		})
+		if runErr != nil {
+			return 0, runErr
+		}
+		// client.Run reports a cancelled context as success: it ends with
+		// `if err := g.Wait(); !errors.Is(err, context.Canceled) { return err }`,
+		// because context.Canceled is how it signals a normal shutdown once the
+		// callback has returned. Without this check a cancelled check would be
+		// reported as a working proxy with a 0 ms ping. checkCtx is the right
+		// thing to test: on the success path gotd cancels its own derived group
+		// context, not this one, so a real ping still gets through.
+		if err := checkCtx.Err(); err != nil {
+			return 0, err
+		}
+		return pingResult, nil
 	}
-	// client.Run reports a cancelled context as success: it ends with
-	// `if err := g.Wait(); !errors.Is(err, context.Canceled) { return err }`,
-	// because context.Canceled is how it signals a normal shutdown once the
-	// callback has returned. Without this check a cancelled check would be
-	// reported as a working proxy with a 0 ms ping. checkCtx is the right
-	// thing to test: on the success path gotd cancels its own derived group
-	// context, not this one, so a real ping still gets through.
-	if err := checkCtx.Err(); err != nil {
-		return 0, err
+
+	ping, err = runOnce()
+	if err != nil && coldStartRetryable(err) && sessionEmpty() && claimColdStartRetry() {
+		log.Printf("COLD START RETRY %s:%d — first exchange of the run failed with %v and the shared session is still empty", server, port, err)
+		return runOnce()
 	}
-	return pingResult, nil
+	return ping, err
 }
 
 // resolveAddr builds the listen address from the HOST and PORT env values.
@@ -910,7 +968,7 @@ func newMux() *http.ServeMux {
 		elapsed := time.Since(start)
 
 		if err != nil {
-			log.Printf("CHECK FAIL %s:%d timeout=%ds (%v)", req.Server, req.Port, timeout, elapsed)
+			log.Printf("CHECK FAIL %s:%d timeout=%ds (%v) err=%v", req.Server, req.Port, timeout, elapsed, err)
 			jsonResponse(w, http.StatusOK, CheckResponse{OK: false})
 		} else {
 			log.Printf("CHECK OK   %s:%d %dms timeout=%ds (%v)", req.Server, req.Port, ping, timeout, elapsed)
@@ -944,6 +1002,9 @@ func newMux() *http.ServeMux {
 		}
 
 		log.Printf("BATCH START %d proxies, concurrency=%d, timeout=%ds", len(reqs), limit, timeout)
+		// One cold-start retry is granted per scan: a first exchange that dies to
+		// a transient network window must not poison every check in the run.
+		coldStartRetryBudget.Store(1)
 		start := time.Now()
 
 		results := make([]CheckResponse, len(reqs))
@@ -1050,6 +1111,9 @@ func newMux() *http.ServeMux {
 
 		total := len(reqs)
 		log.Printf("STREAM START %d proxies, concurrency=%d, timeout=%ds", total, limit, timeout)
+		// One cold-start retry is granted per scan: a first exchange that dies to
+		// a transient network window must not poison every check in the run.
+		coldStartRetryBudget.Store(1)
 
 		type strProgress struct {
 			Completed int    `json:"completed"`
