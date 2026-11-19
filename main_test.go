@@ -104,8 +104,8 @@ func TestTcpCheckLocalhost(t *testing.T) {
 }
 
 func TestNewCheckOptionsSharedSession(t *testing.T) {
-	a := newCheckOptions(nil)
-	b := newCheckOptions(nil)
+	a := newCheckOptions(nil, 5)
+	b := newCheckOptions(nil, 5)
 	if a.SessionStorage == nil || b.SessionStorage == nil {
 		t.Fatal("newCheckOptions returned nil SessionStorage")
 	}
